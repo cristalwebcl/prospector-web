@@ -817,9 +817,11 @@
   // y las notas y el historial se suman sin repetir. Así Yordy y Guillermo pueden trabajar cada uno en su copia.
   function juntarSeguimiento(otro) {
     var mios = estado.seg.items, n = 0;
-    function sinRepetir(arr) { var v = {}; return arr.filter(function (x) { var k = x.f + '|' + x.t; if (v[k]) return false; v[k] = 1; return true; }).sort(function (a, b) { return a.f.localeCompare(b.f); }); }
+    function aArr(x) { return Array.isArray(x) ? x : (x ? [x] : []); }
+    function sinRepetir(arr) { var v = {}; return aArr(arr).filter(function (x) { var k = x.f + '|' + x.t; if (v[k]) return false; v[k] = 1; return true; }).sort(function (a, b) { return a.f.localeCompare(b.f); }); }
     Object.keys(otro.items || {}).forEach(function (k) {
       var a = mios[k], b = otro.items[k]; n++;
+      b.notas = aArr(b.notas); b.historial = aArr(b.historial);
       if (!a) { mios[k] = b; return; }
       var base = ((b.m || '') > (a.m || '')) ? b : a, otroLado = base === a ? b : a, res = {};
       Object.keys(a).concat(Object.keys(b)).forEach(function (key) { res[key] = base[key] !== undefined ? base[key] : otroLado[key]; });
@@ -964,11 +966,17 @@
         var listo = Promise.resolve();
         if (r && r.sha !== sincro.sha) {
           listo = descifrarSeg(r.bytes, clave).then(function (remoto) {
-            sincro.sha = r.sha; sincro.remotoAct = remoto.actualizado || '';
             var antes = JSON.stringify(estado.seg);
             juntarSeguimiento(normSeg(remoto));
+            // el sha se anota DESPUÉS de fundir: si la fusión falla, el próximo ciclo reintenta
+            sincro.sha = r.sha; sincro.remotoAct = remoto.actualizado || '';
             if ((remoto.actualizado || '') > (estado.seg.actualizado || '')) estado.seg.actualizado = remoto.actualizado;
             if (JSON.stringify(estado.seg) !== antes) { persistir(); render(); refrescarFicha(); }
+          }, function (err) {
+            // buzón con basura (formato malo): se sobreescribe con lo local.
+            // Clave que no calza: eso SÍ es error de verdad, no se pisa nada.
+            if (String(err && err.message).indexOf('formato') >= 0) { sincro.sha = r.sha; sincro.remotoAct = ''; sincro.sucio = true; }
+            else throw err;
           });
         } else if (r) { sincro.sha = r.sha; }
         return listo.then(function () {
@@ -983,12 +991,15 @@
       sincro.ultimo = new Date();
       pintarSync('Al día · ' + sincro.ultimo.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     }).catch(function (e) {
+      console.warn('[sync] error:', e);
       pintarSync('Sin sincronizar: ' + (e && e.message ? e.message : e), true);
     }).then(function () {
       sincro.ocupado = false;
       if (sincro.otraVez) { sincro.otraVez = false; return sincronizar('cola'); }
     });
   }
+  // gancho de depuración: PROSPECTOR_DEBUG.sincronizar() desde la consola
+  try { window.PROSPECTOR_DEBUG = { sincronizar: sincronizar, sincro: sincro, juntar: function (o) { return juntarSeguimiento(normSeg(o)); } }; } catch (eDbg) { }
   function syncMarcar() {
     if (!syncToken()) return;
     sincro.sucio = true;
