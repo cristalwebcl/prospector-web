@@ -109,14 +109,20 @@
       s.onload = res; s.onerror = res; document.head.appendChild(s);
     });
   }
-  function guardarAhora() {
-    estado.seg.actualizado = new Date().toISOString();
+  // persistir() guarda SIN marcar cambio nuevo (lo usa la sincronización al fundir lo ajeno);
+  // guardarAhora() es para cambios propios: sella la hora y avisa al buzón
+  function persistir() {
     var txt = JSON.stringify(estado.seg);
     try { localStorage.setItem('prospector.seg', txt); } catch (e) { }
     if (!estado.servidor) return Promise.resolve();
     return fetch('/api/seguimiento', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: txt })
       .then(function (r) { if (!r.ok) throw new Error(r.status); marcarConexion('ok', 'Guardado ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })); })
       .catch(function () { toast('No se pudo guardar en el servidor: quedó en el navegador', 'error'); marcarConexion('lectura', 'Servidor sin respuesta'); });
+  }
+  function guardarAhora() {
+    estado.seg.actualizado = new Date().toISOString();
+    syncMarcar();
+    return persistir();
   }
   var guardar = debounce(guardarAhora, 500);
   function item(id) {
@@ -534,6 +540,16 @@
         '<button class="btn" data-accion="csv">' + ico('descargar') + ' CSV de demos</button>' +
         '<button class="btn btn-peligro" data-accion="borrar-seg">Borrar todo el seguimiento</button>' +
       '</div></section>' +
+      '<section class="panel"><div class="panel-cab"><h2>Sincronización automática</h2><span class="n">buzón cifrado</span></div>' +
+        '<p class="prosa" style="margin-bottom:10px">Con esto activado, lo que marca uno lo ve el otro solo: la app sube los cambios <b>cifrados</b> a un repo privado de la sociedad y baja los ajenos al abrir, al volver a la pestaña y cada 30 segundos. Necesita un token de GitHub pegado una vez en cada navegador.</p>' +
+        '<div class="campos" style="grid-template-columns:minmax(200px,1fr) auto auto;align-items:end">' +
+          '<label class="campo">Token de GitHub (sólo prospector-sync)<input type="password" id="sync-token" value="' + esc(syncToken()) + '" placeholder="github_pat_…" autocomplete="off"></label>' +
+          '<button class="btn btn-primario" data-accion="sync-conectar">Conectar y probar</button>' +
+          '<button class="btn btn-fantasma" data-accion="sync-quitar">Quitar</button>' +
+        '</div>' +
+        '<p class="plantilla-ayuda" style="margin:10px 0 0">Estado: <span id="sync-estado">' + esc(sincro.error ? sincro.error : (sincro.ultimo ? 'Al día · ' + sincro.ultimo.toLocaleTimeString('es-CL') : (syncToken() ? 'token puesto; se prueba al abrir' : 'sin token: modo manual (exportar / importar)'))) + '</span></p>' +
+        '<p class="plantilla-ayuda" style="margin:6px 0 0">El token se crea UNA vez con la cuenta cristalwebcl: github.com → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → Generate new. Repository access: <b>Only select repositories → prospector-sync</b>. Permissions → Contents: <b>Read and write</b>. Vencimiento: 1 año. El mismo token lo pegan los dos.</p>' +
+      '</section>' +
       '<section class="panel"><div class="panel-cab"><h2>Atajos</h2></div><div class="atajos"><kbd>/</kbd><span>buscar</span><kbd>Esc</kbd><span>cerrar ficha o limpiar búsqueda</span><kbd>j</kbd> <span>siguiente</span><kbd>k</kbd><span>anterior</span><kbd>Enter</kbd><span>abrir ficha</span><kbd>o</kbd><span>marcar / desmarcar ofrecida</span><kbd>1–7</kbd><span>cambiar de sección</span><kbd>t</kbd><span>tema claro / oscuro</span></div></section>' +
       '</div>';
   }
@@ -841,12 +857,150 @@
       case 'alerta-agregar': var fe = $('#alerta-fecha').value, tx = $('#alerta-texto').value.trim(); if (!fe || !tx) { toast('Falta la fecha o el texto', 'error'); return; } var al = config('alertas', []).slice(); al.push({ fecha: fe, texto: tx }); estado.seg.config.alertas = al; guardar(); render(); toast('Alerta guardada', 'ok'); break;
       case 'exportar-seg': descargar('seguimiento-' + hoyISO() + '.json', JSON.stringify(estado.seg, null, 2), 'application/json'); break;
       case 'borrar-seg': if (confirm('¿Borrar TODO el seguimiento (ofrecidas, notas, etapas)? El servidor guarda una copia por día en datos/respaldos/.')) { estado.seg = normSeg({ config: estado.seg.config }); guardarAhora(); render(); toast('Seguimiento vaciado'); } break;
+      case 'sync-conectar': var tv = ($('#sync-token').value || '').trim(); if (!tv) { toast('Pega el token primero', 'error'); return; } try { localStorage.setItem('prospector.token', tv); } catch (e2) { } toast('Probando el buzón…'); sincronizar('conectar').then(function () { if (!sincro.error) { toast('Sincronización activa', 'ok'); syncArrancar(); } render(); }); break;
+      case 'sync-quitar': try { localStorage.removeItem('prospector.token'); } catch (e3) { } clearInterval(sincro.reloj); sincro.ultimo = null; sincro.error = ''; toast('Token quitado de este navegador'); render(); break;
     }
   }
   function cambiarTema() {
     var h = document.documentElement, nuevo = h.dataset.tema === 'claro' ? 'oscuro' : 'claro';
     h.dataset.tema = nuevo; localStorage.setItem('prospector.tema', nuevo);
     $('meta[name="theme-color"]').content = nuevo === 'claro' ? '#F2F4F7' : '#0B0F14';
+  }
+
+  /* ---------- sincronización automática: el buzón cifrado en GitHub ---------- */
+  // El buzón es el repo PRIVADO cristalwebcl/prospector-sync: un solo archivo,
+  // seguimiento.enc, cifrado con la MISMA clave de la sociedad (formato PRSY1:
+  // "PRSY1" + salt16 + iv16 + hmac32 + AES-256-CBC del JSON). La app lo baja y
+  // lo funde al abrir, al volver a la pestaña y cada 30 s; y sube los cambios
+  // propios 4 s después de marcar algo. Para escribir necesita un token de
+  // GitHub acotado SOLO a ese repo, pegado una vez por navegador (Ajustes).
+  var sincro = { repo: 'cristalwebcl/prospector-sync', archivo: 'seguimiento.enc', rama: 'main', sha: null, remotoAct: '', sucio: false, ocupado: false, otraVez: false, timer: null, reloj: null, clave: '', ultimo: null, error: '' };
+  var encU8 = new TextEncoder(), decU8 = new TextDecoder();
+  function syncToken() { try { return (localStorage.getItem('prospector.token') || '').trim(); } catch (e) { return ''; } }
+  function syncClave() {
+    if (sincro.clave) return Promise.resolve(sincro.clave);
+    var c = ''; try { c = sessionStorage.getItem('prospector.clave') || localStorage.getItem('prospector.clave') || ''; } catch (e) { }
+    if (c) { sincro.clave = c.trim(); return Promise.resolve(sincro.clave); }
+    if (estado.servidor) return fetch('/api/clave').then(function (r) { return r.json(); }).then(function (j) { sincro.clave = (j.clave || '').trim(); return sincro.clave; }).catch(function () { return ''; });
+    return Promise.resolve('');
+  }
+  function b64aBytes(b64) { var bin = atob(String(b64).replace(/[\r\n]/g, '')); var u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function bytesAB64(u) { var s = ''; for (var i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return btoa(s); }
+  function derivar(clave, salt) {
+    return crypto.subtle.importKey('raw', encU8.encode(clave), 'PBKDF2', false, ['deriveBits'])
+      .then(function (base) { return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: salt, iterations: 200000, hash: 'SHA-256' }, base, 512); })
+      .then(function (bits) {
+        var b = new Uint8Array(bits);
+        return Promise.all([
+          crypto.subtle.importKey('raw', b.slice(0, 32), { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']),
+          crypto.subtle.importKey('raw', b.slice(32, 64), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'])
+        ]);
+      }).then(function (ks) { return { aes: ks[0], mac: ks[1] }; });
+  }
+  function cifrarSeg(obj, clave) {
+    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(16));
+    var plano = encU8.encode(JSON.stringify(obj));
+    return derivar(clave, salt).then(function (k) {
+      return crypto.subtle.encrypt({ name: 'AES-CBC', iv: iv }, k.aes, plano).then(function (cif) {
+        cif = new Uint8Array(cif);
+        var firmado = new Uint8Array(32 + cif.length); firmado.set(salt, 0); firmado.set(iv, 16); firmado.set(cif, 32);
+        return crypto.subtle.sign('HMAC', k.mac, firmado).then(function (mac) {
+          var out = new Uint8Array(69 + cif.length);
+          out.set([80, 82, 83, 89, 49], 0); out.set(salt, 5); out.set(iv, 21); out.set(new Uint8Array(mac), 37); out.set(cif, 69);
+          return out;
+        });
+      });
+    });
+  }
+  function descifrarSeg(bytes, clave) {
+    if (decU8.decode(bytes.slice(0, 5)) !== 'PRSY1') return Promise.reject(new Error('el buzón no tiene el formato esperado'));
+    var salt = bytes.slice(5, 21), iv = bytes.slice(21, 37), mac = bytes.slice(37, 69), cif = bytes.slice(69);
+    return derivar(clave, salt).then(function (k) {
+      var firmado = new Uint8Array(32 + cif.length); firmado.set(salt, 0); firmado.set(iv, 16); firmado.set(cif, 32);
+      return crypto.subtle.verify('HMAC', k.mac, mac, firmado).then(function (ok) {
+        if (!ok) throw new Error('la clave no calza con el buzón');
+        return crypto.subtle.decrypt({ name: 'AES-CBC', iv: iv }, k.aes, cif);
+      });
+    }).then(function (plano) { return JSON.parse(decU8.decode(new Uint8Array(plano))); });
+  }
+  function ghCab() { return { 'Authorization': 'Bearer ' + syncToken(), 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }; }
+  function ghUrl() { return 'https://api.github.com/repos/' + sincro.repo + '/contents/' + sincro.archivo; }
+  function ghBajar() {
+    return fetch(ghUrl() + '?ref=' + sincro.rama + '&t=' + Date.now(), { headers: ghCab(), cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) return null;
+      if (r.status === 401 || r.status === 403) throw new Error('el token no sirve o venció (' + r.status + ')');
+      if (!r.ok) throw new Error('GitHub respondió ' + r.status);
+      return r.json().then(function (j) { return { bytes: b64aBytes(j.content), sha: j.sha }; });
+    });
+  }
+  function ghSubir(bytes, reintento) {
+    var cuerpo = { message: 'sync ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' · ' + estado.usuario, content: bytesAB64(bytes), branch: sincro.rama };
+    if (sincro.sha) cuerpo.sha = sincro.sha;
+    return fetch(ghUrl(), { method: 'PUT', headers: ghCab(), body: JSON.stringify(cuerpo) }).then(function (r) {
+      if ((r.status === 409 || r.status === 422) && !reintento) {
+        // el otro guardó justo antes: bajar lo suyo, fundir y reintentar UNA vez
+        return ghBajar().then(function (rr) {
+          if (!rr) return;
+          sincro.sha = rr.sha;
+          return descifrarSeg(rr.bytes, sincro.clave).then(function (rem) { juntarSeguimiento(normSeg(rem)); persistir(); });
+        }).then(function () { return cifrarSeg(estado.seg, sincro.clave); }).then(function (b2) { return ghSubir(b2, 1); });
+      }
+      if (!r.ok) throw new Error('no se pudo subir al buzón (' + r.status + ')');
+      return r.json().then(function (j) { return j.content.sha; });
+    });
+  }
+  function pintarSync(txt, esError) {
+    sincro.error = esError ? txt : '';
+    var e = $('#sync-estado'); if (e) { e.textContent = txt; e.style.color = esError ? 'var(--peligro)' : 'var(--ok)'; }
+    if (!esError && !estado.servidor) marcarConexion('ok', 'Sincronizado ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }));
+  }
+  function sincronizar(motivo) {
+    if (!syncToken()) return Promise.resolve();
+    if (sincro.ocupado) { sincro.otraVez = true; return Promise.resolve(); }
+    sincro.ocupado = true;
+    return syncClave().then(function (clave) {
+      if (!clave) throw new Error('este navegador no tiene la clave de la sociedad');
+      return ghBajar().then(function (r) {
+        var listo = Promise.resolve();
+        if (r && r.sha !== sincro.sha) {
+          listo = descifrarSeg(r.bytes, clave).then(function (remoto) {
+            sincro.sha = r.sha; sincro.remotoAct = remoto.actualizado || '';
+            var antes = JSON.stringify(estado.seg);
+            juntarSeguimiento(normSeg(remoto));
+            if ((remoto.actualizado || '') > (estado.seg.actualizado || '')) estado.seg.actualizado = remoto.actualizado;
+            if (JSON.stringify(estado.seg) !== antes) { persistir(); render(); refrescarFicha(); }
+          });
+        } else if (r) { sincro.sha = r.sha; }
+        return listo.then(function () {
+          var subir = !r || sincro.sucio || ((estado.seg.actualizado || '') > (sincro.remotoAct || ''));
+          if (!subir) return;
+          return cifrarSeg(estado.seg, clave).then(function (b) { return ghSubir(b); }).then(function (sha) {
+            sincro.sha = sha; sincro.sucio = false; sincro.remotoAct = estado.seg.actualizado || '';
+          });
+        });
+      });
+    }).then(function () {
+      sincro.ultimo = new Date();
+      pintarSync('Al día · ' + sincro.ultimo.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }).catch(function (e) {
+      pintarSync('Sin sincronizar: ' + (e && e.message ? e.message : e), true);
+    }).then(function () {
+      sincro.ocupado = false;
+      if (sincro.otraVez) { sincro.otraVez = false; return sincronizar('cola'); }
+    });
+  }
+  function syncMarcar() {
+    if (!syncToken()) return;
+    sincro.sucio = true;
+    clearTimeout(sincro.timer);
+    sincro.timer = setTimeout(function () { sincronizar('cambio'); }, 4000);
+  }
+  function syncArrancar() {
+    if (!syncToken()) return;
+    sincronizar('inicio');
+    clearInterval(sincro.reloj);
+    sincro.reloj = setInterval(function () { if (!document.hidden) sincronizar('reloj'); }, 30000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) sincronizar('vuelta'); });
   }
 
   /* ---------- arranque ---------- */
@@ -862,6 +1016,7 @@
       else { marcarConexion('lectura', 'Versión compartida · ' + estado.datos.generado); var av3 = $('#aviso'); av3.hidden = false; av3.innerHTML = ico('alerta') + ' <span>Versión compartida: lo que marques queda en este navegador. Para pasarle el seguimiento al otro, Ajustes → Exportar JSON, y el otro lo importa.</span>'; }
       if (estado.servidor && estado.datos.excelFecha && estado.datos.excelFecha > estado.datos.generado) { var av2 = $('#aviso'); av2.hidden = false; av2.innerHTML = ico('alerta') + ' <span>El Excel cambió después del último inventario.</span><button class="btn btn-chico btn-primario" data-accion="actualizar">Actualizar ahora</button>'; }
       var h = leerHash(); irA(h.vista, h.id);
+      syncArrancar();
       if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) { navigator.serviceWorker.register('sw.js').catch(function () { }); }
     });
   }
