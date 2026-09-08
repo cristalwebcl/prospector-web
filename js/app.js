@@ -132,8 +132,32 @@
     return it;
   }
   function itemLectura(id) { return estado.seg.items[id] || { ofrecida: false, notas: [], historial: [], prioridad: 0, quien: '', pendiente: false, motivo: '' }; }
-  // toda modificación pasa por acá: deja la hora del cambio (sirve para juntar dos seguimientos) y guarda
-  function tocar(id) { item(id).m = new Date().toISOString(); guardar(); }
+  // toda modificación pasa por acá: deja la hora del cambio (sirve para juntar dos seguimientos) y guarda.
+  // Desde el 07-09-2026 además sella POR CAMPO (it.mc[campo] = hora) comparando contra el espejo,
+  // la copia de cómo estaba la ficha la última vez que se tocó o se recibió de la nube: así dos
+  // personas que cambian campos distintos de la misma ficha no se pisan al fundir.
+  var CAMPOS_FICHA = ['ofrecida', 'fechaOfrecida', 'canal', 'resultado', 'proximo', 'prioridad', 'pedirDemo', 'quien', 'pendiente', 'motivo'];
+  // campos que la app cambia en bloque y que sólo tienen sentido juntos: se funden como uno
+  var GRUPOS_FICHA = [['ofrecida', 'fechaOfrecida', 'resultado'], ['pendiente', 'motivo']];
+  var espejo = {};
+  function fichaVacia() { return { ofrecida: false, fechaOfrecida: '', canal: '', resultado: '', proximo: '', prioridad: 0, pedirDemo: false, quien: '', pendiente: false, motivo: '' }; }
+  // el sello nunca retrocede: si la ficha ya traía una hora más nueva (reloj del otro
+  // adelantado), se sella un milisegundo después, o el trigger de la nube la rechazaría
+  function selloDespuesDe(m) { var ahora = new Date().toISOString(); return (m && m >= ahora) ? new Date(Date.parse(m) + 1).toISOString() : ahora; }
+  function tocar(id) {
+    var it = item(id), antes = espejo[id] || fichaVacia(), ahora = selloDespuesDe(it.m);
+    it.mc = it.mc || {};
+    CAMPOS_FICHA.forEach(function (k) {
+      if (canon(it[k]) !== canon(antes[k])) it.mc[k] = ahora;
+    });
+    it.m = ahora;
+    espejo[id] = JSON.parse(JSON.stringify(it));
+    syncMarcar(id);
+    guardar();
+  }
+  function tocarConfig() { estado.seg.config.m = selloDespuesDe(estado.seg.config.m); syncMarcar('config'); guardar(); }
+  function notasVivas(it) { return ((it && it.notas) || []).filter(function (n) { return !n.x; }); }
+  function alertasVivas() { return config('alertas', []).filter(function (a) { return !a.x; }); }
   var MOTIVOS = ['no contestó', 'en espera', 'volver a llamar', 'ocupado', 'pidió que lo llamen después', 'mandó a otra persona'];
   var PERSONAS = ['Yordy', 'Guillermo'];
   function etapaDe(it) { if (it.resultado) return it.resultado; return it.ofrecida ? 'ofrecida' : 'nueva'; }
@@ -328,7 +352,7 @@
     var v = $('#vista-hoy');
     var prox = demos().map(function (d) { var it = itemLectura(d.id); return it.proximo && diasHasta(it.proximo) > 0 && diasHasta(it.proximo) <= 10 ? { d: d, it: it } : null; }).filter(Boolean).sort(function (a, b) { return a.it.proximo.localeCompare(b.it.proximo); });
     var ultimas = demos().slice().sort(function (a, b) { return (b.modificado || '').localeCompare(a.modificado || '') || (b.num || 0) - (a.num || 0); }).slice(0, 5);
-    var alertas = estado.alertas.concat(config('alertas', [])).map(function (a) { return { a: a, dias: diasHasta(a.fecha) }; }).sort(function (x, y) { return (x.dias == null ? 99 : x.dias) - (y.dias == null ? 99 : y.dias); });
+    var alertas = estado.alertas.concat(alertasVivas()).map(function (a) { return { a: a, dias: diasHasta(a.fecha) }; }).sort(function (x, y) { return (x.dias == null ? 99 : x.dias) - (y.dias == null ? 99 : y.dias); });
     v.innerHTML =
       '<section class="hero hero--volcan">' +
         '<span class="credito">Volcán Villarrica · pxhere</span>' +
@@ -402,7 +426,7 @@
       var th = function (campo, txt, cls) { return '<th data-orden="' + campo + '" class="' + (cls || '') + (f.orden === campo ? ' orden' : '') + '">' + txt + '</th>'; };
       html += '<div class="tabla-envoltura"><table class="tabla"><thead><tr><th></th>' + th('num', '#', 'num') + th('nombre', 'Negocio') + '<th>Rubro</th><th>Ciudad</th><th>Teléfono</th>' + th('resenas', 'Reseñas', 'num') + th('nota', 'Nota', 'num') + th('puntaje', 'Pts', 'num') + '<th>Estado</th><th>Etapa</th><th>Llamó</th><th>Última nota</th><th>Ofrecida</th><th></th></tr></thead><tbody>' +
         lista.map(function (d) {
-          var it = itemLectura(d.id), e = etapaInfo(etapaDe(it)), img = imagenDe(d), ultima = (it.notas && it.notas.length) ? it.notas[it.notas.length - 1].t : '';
+          var it = itemLectura(d.id), e = etapaInfo(etapaDe(it)), img = imagenDe(d), nv = notasVivas(it), ultima = nv.length ? nv[nv.length - 1].t : '';
           return '<tr data-id="' + esc(d.id) + '"' + (estado.sel === d.id ? ' class="sel"' : '') + '><td class="mini-cel">' + (img ? '<img class="mini" src="' + esc(img) + '" alt="" loading="lazy">' : '<div class="mini"></div>') + '</td><td class="num">' + (d.num || '') + '</td><td class="nombre">' + esc(d.nombre) + (it.prioridad ? ' <span style="color:var(--aviso)">' + '★'.repeat(it.prioridad) + '</span>' : '') + '<small>' + esc(d.loteEtiqueta) + '</small></td><td>' + esc(d.rubro) + '</td><td>' + esc(d.ciudad) + '</td><td class="tel">' + esc(d.tel) + '</td><td class="num">' + fmt(d.resenas) + '</td><td class="num">' + fmtNota(d.nota) + '</td><td class="num"><b>' + (d.puntaje || '') + '</b></td><td>' + (d.publicada ? '<span class="insignia ok">En línea</span>' : '<span class="insignia">Local</span>') + '</td><td><span class="etapa-punto" style="--e:' + e.color + '"></span>' + esc(e.nombre) + (it.pendiente ? '<br><span class="insignia aviso">Pendiente' + (it.motivo ? ' · ' + esc(it.motivo) : '') + '</span>' : '') + '</td><td>' + (it.quien ? esc(it.quien) : '<span class="silencio">—</span>') + '</td><td class="cel-gancho"><span>' + esc(ultima) + '</span></td><td><label class="check" data-detener><input type="checkbox" data-ofrecida="' + esc(d.id) + '"' + (it.ofrecida ? ' checked' : '') + '><span></span></label></td><td class="acciones">' + botonesRapidos(d) + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }
@@ -417,7 +441,7 @@
       '</div>' +
       '<div class="tarjeta-cuerpo"><span class="tarjeta-num">' + (d.num ? '#' + d.num + ' · ' : '') + esc(d.loteEtiqueta) + '</span><h3>' + esc(d.nombre) + '</h3><span class="sub">' + esc(d.rubro || '—') + (d.ciudad ? ' · ' + esc(d.ciudad) : '') + '</span>' +
         '<div class="tarjeta-stats">' + (d.resenas ? '<span><b>' + fmt(d.resenas) + '</b> reseñas</span>' : '') + (d.nota ? '<span class="nota">' + fmtNota(d.nota) + '</span>' : '') + (d.puntaje ? '<span><b>' + d.puntaje + '</b> pts</span>' : '') + (it.proximo ? '<span style="color:var(--acento-2)">↻ ' + esc(fechaCorta(it.proximo).slice(0, 5)) + '</span>' : '') + (it.quien ? '<span title="Quién lo llamó">☎ ' + esc(it.quien) + '</span>' : '') + '</div>' +
-        (it.notas && it.notas.length ? '<p class="tarjeta-nota" title="Última nota">' + esc(it.notas[it.notas.length - 1].t) + '</p>' : '') +
+        (notasVivas(it).length ? '<p class="tarjeta-nota" title="Última nota">' + esc(notasVivas(it).slice(-1)[0].t) + '</p>' : '') +
         '<div class="tarjeta-pie"><label class="check" data-detener><input type="checkbox" data-ofrecida="' + esc(d.id) + '"' + (it.ofrecida ? ' checked' : '') + '><span>' + (it.ofrecida ? 'Ofrecida' : 'Marcar ofrecida') + '</span></label><div class="rapidas">' + botonesRapidos(d) + '</div></div>' +
       '</div></article>';
   }
@@ -512,7 +536,7 @@
 
   /* ---------- AJUSTES ---------- */
   function renderAjustes() {
-    var v = $('#vista-ajustes'), c = estado.seg.config, d = estado.datos, al = config('alertas', []);
+    var v = $('#vista-ajustes'), c = estado.seg.config, d = estado.datos, al = alertasVivas();
     v.innerHTML = '<div class="ajustes-grilla">' +
       '<section class="panel"><div class="panel-cab"><h2>Yo y mi meta</h2></div><div class="campos">' +
         '<label class="campo">Nombre para los mensajes<input data-config="nombre" value="' + esc(config('nombre', 'Yordy Serna')) + '"></label>' +
@@ -540,15 +564,20 @@
         '<button class="btn" data-accion="csv">' + ico('descargar') + ' CSV de demos</button>' +
         '<button class="btn btn-peligro" data-accion="borrar-seg">Borrar todo el seguimiento</button>' +
       '</div></section>' +
-      '<section class="panel"><div class="panel-cab"><h2>Sincronización automática</h2><span class="n">buzón cifrado</span></div>' +
-        '<p class="prosa" style="margin-bottom:10px">Con esto activado, lo que marca uno lo ve el otro solo: la app sube los cambios <b>cifrados</b> a un repo privado de la sociedad y baja los ajenos al abrir, al volver a la pestaña y cada 30 segundos. Necesita un token de GitHub pegado una vez en cada navegador.</p>' +
-        '<div class="campos" style="grid-template-columns:minmax(200px,1fr) auto auto;align-items:end">' +
-          '<label class="campo">Token de GitHub (sólo prospector-sync)<input type="password" id="sync-token" value="' + esc(syncToken()) + '" placeholder="github_pat_…" autocomplete="off"></label>' +
-          '<button class="btn btn-primario" data-accion="sync-conectar">Conectar y probar</button>' +
-          '<button class="btn btn-fantasma" data-accion="sync-quitar">Quitar</button>' +
-        '</div>' +
-        '<p class="plantilla-ayuda" style="margin:10px 0 0">Estado: <span id="sync-estado">' + esc(sincro.error ? sincro.error : (sincro.ultimo ? 'Al día · ' + sincro.ultimo.toLocaleTimeString('es-CL') : (syncToken() ? 'token puesto; se prueba al abrir' : 'sin token: modo manual (exportar / importar)'))) + '</span></p>' +
-        '<p class="plantilla-ayuda" style="margin:6px 0 0">El token se crea UNA vez con la cuenta cristalwebcl: github.com → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → Generate new. Repository access: <b>Only select repositories → prospector-sync</b>. Permissions → Contents: <b>Read and write</b>. Vencimiento: 1 año. El mismo token lo pegan los dos.</p>' +
+      '<section class="panel"><div class="panel-cab"><h2>Sincronización en vivo</h2><span class="n">' + (sincro.sesion ? (sincro.vivo ? 'en vivo' : 'conectado') : 'sin sesión') + '</span></div>' +
+        '<p class="prosa" style="margin-bottom:10px">Lo que marca uno lo ve el otro al instante: cada cambio se sube a la base de la sociedad (Supabase) y baja solo. Se puede entrar con una cuenta por persona o con una sola cuenta compartida: la firma de las llamadas se elige en cada navegador. Correo y contraseña, una vez por navegador.</p>' +
+        (sincro.sesion ?
+          '<div class="info-lista"><div><span>Cuenta</span><span>' + esc(sincro.sesion.user ? sincro.sesion.user.email : '') + '</span></div><div><span>Firma como</span><span>' + esc(estado.usuario) + '</span></div><div><span>En cola</span><span>' + enCola() + '</span></div></div>' +
+          '<div class="acciones-fila" style="margin-top:12px"><button class="btn btn-primario" data-accion="sync-ahora">' + ico('refrescar') + ' Sincronizar ahora</button><button class="btn" data-accion="sync-resubir" title="Vuelve a subir todo lo de este navegador; la base se queda con lo más nuevo">Volver a subir todo</button><button class="btn btn-fantasma" data-accion="sync-salir">Cerrar sesión</button></div>'
+        :
+          '<form id="sync-form" class="campos" style="grid-template-columns:minmax(180px,1fr) minmax(160px,1fr) auto;align-items:end" autocomplete="on">' +
+            '<label class="campo">Correo<input type="email" id="sync-correo" autocomplete="username" placeholder="tu@correo.cl" required></label>' +
+            '<label class="campo">Contraseña<input type="password" id="sync-pass" autocomplete="current-password" required></label>' +
+            '<button class="btn btn-primario" type="submit">Entrar</button>' +
+          '</form>'
+        ) +
+        '<p class="plantilla-ayuda" style="margin:10px 0 0">Estado: <span id="sync-estado">' + esc(sincro.error ? sincro.error : (sincro.ultimo ? (sincro.vivo ? 'En vivo · ' : 'Al día · ') + sincro.ultimo.toLocaleTimeString('es-CL') : (sb() ? 'sin sesión: lo que marques queda en este navegador' + (enCola() ? ' (' + enCola() + ' en cola)' : '') : 'falta js/config.js: modo manual (exportar / importar)'))) + '</span></p>' +
+        '<p class="plantilla-ayuda" style="margin:6px 0 0">Las cuentas las crea Yordy en supabase.com (Authentication → Users). Los ajustes personales de arriba (nombre, WhatsApp, meta, plantilla, guión) son de cada navegador; se comparten las fichas, las notas y las alertas.</p>' +
       '</section>' +
       '<section class="panel"><div class="panel-cab"><h2>Atajos</h2></div><div class="atajos"><kbd>/</kbd><span>buscar</span><kbd>Esc</kbd><span>cerrar ficha o limpiar búsqueda</span><kbd>j</kbd> <span>siguiente</span><kbd>k</kbd><span>anterior</span><kbd>Enter</kbd><span>abrir ficha</span><kbd>o</kbd><span>marcar / desmarcar ofrecida</span><kbd>1–7</kbd><span>cambiar de sección</span><kbd>t</kbd><span>tema claro / oscuro</span></div></section>' +
       '</div>';
@@ -609,9 +638,10 @@
       '</div>';
   }
   function bloqueNotas(id, it) {
-    return '<section class="ficha-seccion"><h3>Notas <span class="der silencio">' + it.notas.length + '</span></h3><div class="notas">' +
+    var vivas = notasVivas(it);
+    return '<section class="ficha-seccion"><h3>Notas <span class="der silencio">' + vivas.length + '</span></h3><div class="notas">' +
       '<div class="nota-nueva"><textarea class="entrada" data-nota-texto="' + esc(id) + '" placeholder="Qué dijo, con quién hablé, qué quedó pendiente… (Ctrl+Enter guarda)"></textarea><button class="btn btn-primario" data-nota-agregar="' + esc(id) + '">Guardar</button></div>' +
-      it.notas.slice().reverse().map(function (n, i) { return '<div class="nota"><time>' + esc(fechaCorta(n.f)) + ' ' + esc(n.f.slice(11, 16)) + (n.q ? ' · ' + esc(n.q) : '') + '</time>' + esc(n.t) + '<button class="borrar" data-nota-borrar="' + (it.notas.length - 1 - i) + '" data-id="' + esc(id) + '" title="Borrar">✕</button></div>'; }).join('') +
+      vivas.slice().reverse().map(function (n) { return '<div class="nota"><time>' + esc(fechaCorta(n.f)) + ' ' + esc(String(n.f || '').slice(11, 16)) + (n.q ? ' · ' + esc(n.q) : '') + '</time>' + esc(n.t) + '<button class="borrar" data-nota-borrar="' + esc(n.f) + '" data-id="' + esc(id) + '" title="Borrar">✕</button></div>'; }).join('') +
       (it.historial.length ? '<div class="historial">' + it.historial.slice(-8).reverse().map(function (h) { return '<span>' + esc(fechaCorta(h.f).slice(0, 5)) + ' ' + esc(h.t) + (h.q ? ' · ' + esc(h.q) : '') + '</span>'; }).join('') + '</div>' : '') +
       '</div></section>';
   }
@@ -664,7 +694,7 @@
       '<section class="ficha-seccion"><h3>Datos</h3><div class="datos"><div class="dato"><span>Reseñas</span><b class="mono">' + fmt(p.resenas) + '</b></div><div class="dato"><span>Nota</span><b class="mono">' + (p.nota ? '★ ' + fmtNota(p.nota) : '–') + '</b></div><div class="dato"><span>Puntaje</span><b class="mono">' + (p.puntaje || '–') + '</b></div><div class="dato"><span>Presencia</span><b>' + esc(p.presencia || '–') + '</b></div><div class="dato"><span>Estado Excel</span><b>' + esc(p.estado || '–') + '</b></div><div class="dato"><span>Verificado</span><b class="mono">' + esc(p.verificado || '–') + '</b></div><div class="dato"><span>Origen</span><b>' + esc(p.origen || '–') + '</b></div></div></section>' +
       '</div>';
   }
-  function refrescarFicha() { if (estado.sel) { var f = $('#ficha'), y = f.scrollTop, d = buscarDemo(estado.sel), p = d ? null : buscarProspecto(estado.sel); if (!d && !p) return; f.innerHTML = d ? fichaDemo(d) : fichaProspecto(p); f.scrollTop = y; if (d && d.queFotos) { fetch((estado.servidor ? '/demos/' : '../../demos/') + d.queFotos.split('/').map(encodeURIComponent).join('/')).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var z = $('#que-fotos'); if (z && t) z.innerHTML = md(t); }).catch(function () { }); } } }
+  function refrescarFicha() { if (estado.sel) { var f = $('#ficha'), y = f.scrollTop, d = buscarDemo(estado.sel), p = d ? null : buscarProspecto(estado.sel); if (!d && !p) return; var ta0 = f.querySelector('[data-nota-texto]'), borrador = ta0 ? ta0.value : ''; f.innerHTML = d ? fichaDemo(d) : fichaProspecto(p); f.scrollTop = y; var ta1 = f.querySelector('[data-nota-texto]'); if (ta1 && borrador) ta1.value = borrador; if (d && d.queFotos) { fetch((estado.servidor ? '/demos/' : '../../demos/') + d.queFotos.split('/').map(encodeURIComponent).join('/')).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var z = $('#que-fotos'); if (z && t) z.innerHTML = md(t); }).catch(function () { }); } } }
 
   /* ---------- acciones sobre el seguimiento ---------- */
   function setOfrecida(id, val) {
@@ -714,7 +744,7 @@
   }
   function csvDemos(lista) {
     var cab = ['num', 'nombre', 'rubro', 'ciudad', 'telefono', 'resenas', 'nota', 'puntaje', 'lote', 'publicada', 'url', 'etapa', 'quien_llamo', 'pendiente', 'motivo', 'ofrecida_el', 'proximo_contacto', 'prioridad', 'notas'];
-    var filas = lista.map(function (d) { var it = itemLectura(d.id); return [d.num || '', d.nombre, d.rubro, d.ciudad, d.tel, d.resenas, String(d.nota || '').replace('.', ','), d.puntaje, d.loteEtiqueta, d.publicada ? 'sí' : 'no', d.url, etapaInfo(etapaDe(it)).nombre, it.quien || '', it.pendiente ? 'sí' : '', it.motivo || '', fechaCorta(it.fechaOfrecida), fechaCorta(it.proximo), it.prioridad || '', (it.notas || []).map(function (n) { return fechaCorta(n.f) + (n.q ? ' ' + n.q : '') + ': ' + n.t; }).join(' | ')]; });
+    var filas = lista.map(function (d) { var it = itemLectura(d.id); return [d.num || '', d.nombre, d.rubro, d.ciudad, d.tel, d.resenas, String(d.nota || '').replace('.', ','), d.puntaje, d.loteEtiqueta, d.publicada ? 'sí' : 'no', d.url, etapaInfo(etapaDe(it)).nombre, it.quien || '', it.pendiente ? 'sí' : '', it.motivo || '', fechaCorta(it.fechaOfrecida), fechaCorta(it.proximo), it.prioridad || '', (notasVivas(it) || []).map(function (n) { return fechaCorta(n.f) + (n.q ? ' ' + n.q : '') + ': ' + n.t; }).join(' | ')]; });
     var txt = '\uFEFF' + [cab].concat(filas).map(function (f) { return f.map(function (c) { c = String(c == null ? '' : c); return /[;"\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(';'); }).join('\r\n');
     descargar('demos-' + hoyISO() + '.csv', txt, 'text/csv;charset=utf-8');
   }
@@ -775,10 +805,10 @@
       if (t.dataset.prioridad) { var it = item(id), n = Number(t.dataset.prioridad); it.prioridad = it.prioridad === n ? 0 : n; tocar(id); render(); refrescarFicha(); return; }
       if (t.dataset.proximoEn) { var it2 = item(id), f = new Date(); f.setDate(f.getDate() + Number(t.dataset.proximoEn)); it2.proximo = f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0') + '-' + String(f.getDate()).padStart(2, '0'); tocar(id); render(); refrescarFicha(); toast('Seguimiento el ' + fechaCorta(it2.proximo)); return; }
       if (t.dataset.notaAgregar) { var ta = $('[data-nota-texto="' + CSS.escape(t.dataset.notaAgregar) + '"]'); agregarNota(t.dataset.notaAgregar, ta.value); return; }
-      if (t.dataset.notaBorrar !== undefined) { var it3 = item(id); it3.notas.splice(Number(t.dataset.notaBorrar), 1); tocar(id); refrescarFicha(); render(); return; }
+      if (t.dataset.notaBorrar !== undefined) { var it3 = item(id); it3.notas.forEach(function (n) { if (n.f === t.dataset.notaBorrar) n.x = 1; }); tocar(id); refrescarFicha(); render(); return; }
       if (t.dataset.recapturar) { recapturar(t.dataset.recapturar, t); return; }
       if (t.dataset.vistaCap) { var d2 = buscarDemo(estado.sel); if (!d2) return; $$('[data-vista-cap]').forEach(function (b) { b.classList.toggle('activo', b === t); }); $('#ficha-img').src = imagenDe(d2, t.dataset.vistaCap === 'movil'); return; }
-      if (t.dataset.alertaBorrar !== undefined) { var al = config('alertas', []).slice(); al.splice(Number(t.dataset.alertaBorrar), 1); estado.seg.config.alertas = al; guardar(); render(); return; }
+      if (t.dataset.alertaBorrar !== undefined) { var alv = alertasVivas()[Number(t.dataset.alertaBorrar)]; if (alv) { alv.x = 1; tocarConfig(); } render(); return; }
       if (t.dataset.accion) { accion(t.dataset.accion, t); return; }
       if (t.dataset.pid) { abrirFicha(t.dataset.pid); return; }
       if (id && (t.classList.contains('tarjeta') || t.tagName === 'TR' || t.classList.contains('cola-item') || t.classList.contains('kcard') || t.tagName === 'A' && t.closest('.alerta'))) { if (t.tagName === 'A') e.preventDefault(); if (t.classList.contains('kcard') || t.closest('.alerta')) { irA('demos', id); } else abrirFicha(id); }
@@ -791,7 +821,10 @@
       if (t.dataset.filtro) { estado.filtros[t.dataset.filtro] = t.value; render(); return; }
       if (t.dataset.campo) { var it2 = item(t.dataset.id); it2[t.dataset.campo] = t.value; tocar(t.dataset.id); render(); if (t.dataset.campo === 'motivo') refrescarFicha(); return; }
       if (t.dataset.config !== undefined) { estado.seg.config[t.dataset.config] = t.type === 'number' ? Number(t.value) : t.value; guardar(); toast('Ajuste guardado'); return; }
-      if (t.id === 'importar-seg' && t.files[0]) { var r = new FileReader(); r.onload = function () { try { var n = juntarSeguimiento(normSeg(JSON.parse(r.result))); guardarAhora(); render(); refrescarFicha(); toast('Seguimiento juntado: ' + n + ' fichas (gana lo más nuevo por negocio; las notas se suman)', 'ok'); } catch (err) { toast('Archivo inválido', 'error'); } }; r.readAsText(t.files[0]); t.value = ''; }
+      if (t.id === 'importar-seg' && t.files[0]) { var r = new FileReader(); r.onload = function () { try { var n = juntarSeguimiento(normSeg(JSON.parse(r.result))); espejo = JSON.parse(JSON.stringify(estado.seg.items)); reconciliar(); guardarAhora(); render(); refrescarFicha(); toast('Seguimiento juntado: ' + n + ' fichas (gana lo más nuevo por campo; las notas se suman)' + (sincro.sesion ? ' · subiendo' : ''), 'ok'); } catch (err) { toast('Archivo inválido', 'error'); } }; r.readAsText(t.files[0]); t.value = ''; }
+    });
+    document.addEventListener('submit', function (e) {
+      if (e.target && e.target.id === 'sync-form') { e.preventDefault(); var b = e.target.querySelector('button[type=submit]'); b.disabled = true; entrar($('#sync-correo').value.trim(), $('#sync-pass').value).then(function () { b.disabled = false; }); }
     });
     document.addEventListener('keydown', function (e) {
       var enCampo = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable;
@@ -815,24 +848,64 @@
   }
   // Junta el seguimiento de otra persona con el propio: por negocio gana el que se tocó más tarde (campo m),
   // y las notas y el historial se suman sin repetir. Así Yordy y Guillermo pueden trabajar cada uno en su copia.
+  // Notas, historial y alertas son CONJUNTOS: se unen sin repetir por (f, t) y una entrada con
+  // lápida (x: 1) gana sobre la misma sin lápida, así borrar propaga y no resucita.
+  function aArr(x) { return Array.isArray(x) ? x : (x ? [x] : []); }
+  function sinRepetir(arr) {
+    var v = {}, orden = [];
+    aArr(arr).forEach(function (x) { if (!x || typeof x !== 'object') return; var k = (x.f || '') + '|' + (x.t || ''); if (!v[k]) orden.push(k); if (!v[k] || x.x) v[k] = x; });
+    return orden.map(function (k) { return v[k]; }).sort(function (a, b) { return String(a.f || '').localeCompare(String(b.f || '')); });
+  }
   function juntarSeguimiento(otro) {
     var mios = estado.seg.items, n = 0;
-    function aArr(x) { return Array.isArray(x) ? x : (x ? [x] : []); }
-    function sinRepetir(arr) { var v = {}; return aArr(arr).filter(function (x) { var k = x.f + '|' + x.t; if (v[k]) return false; v[k] = 1; return true; }).sort(function (a, b) { return a.f.localeCompare(b.f); }); }
     Object.keys(otro.items || {}).forEach(function (k) {
       var a = mios[k], b = otro.items[k]; n++;
+      if (!b || typeof b !== 'object') return;
       b.notas = aArr(b.notas); b.historial = aArr(b.historial);
       if (!a) { mios[k] = b; return; }
-      var base = ((b.m || '') > (a.m || '')) ? b : a, otroLado = base === a ? b : a, res = {};
-      Object.keys(a).concat(Object.keys(b)).forEach(function (key) { res[key] = base[key] !== undefined ? base[key] : otroLado[key]; });
+      // Por campo (o por grupo de campos) gana el sello más nuevo. Un campo sin sello vale ''
+      // (nunca se le inventa uno con el m de la ficha). Empate exacto: decide el m de la ficha
+      // y, si también empata, el valor, para que los dos lados elijan lo mismo y no haya ping-pong.
+      var res = {}, ma = a.mc || {}, mb = b.mc || {}, am = a.m || '', bm = b.m || '';
+      res.mc = {};
+      function ganaB(c, ta, tb) { return tb > ta || (tb === ta && (bm > am || (bm === am && canon(b[c]) > canon(a[c])))); }
+      function selloGrupo(mc, g) { var s = ''; g.forEach(function (c) { if ((mc[c] || '') > s) s = mc[c]; }); return s; }
+      var enGrupo = {};
+      GRUPOS_FICHA.forEach(function (g) {
+        var ta = selloGrupo(ma, g), tb = selloGrupo(mb, g), deB = ganaB(g[0], ta, tb);
+        g.forEach(function (c) { enGrupo[c] = 1; res[c] = deB ? b[c] : a[c]; var s = deB ? tb : ta; if (s) res.mc[c] = s; });
+      });
+      CAMPOS_FICHA.forEach(function (c) {
+        if (enGrupo[c]) return;
+        var ta = ma[c] || '', tb = mb[c] || '', deB = ganaB(c, ta, tb);
+        res[c] = deB ? b[c] : a[c]; var s = deB ? tb : ta; if (s) res.mc[c] = s;
+      });
+      var base = (bm > am) ? b : a, otroLado = base === a ? b : a;
+      Object.keys(a).concat(Object.keys(b)).forEach(function (key) { if (res[key] === undefined && key !== 'mc') res[key] = base[key] !== undefined ? base[key] : otroLado[key]; });
+      if (!Object.keys(res.mc).length) delete res.mc;
+      res.m = (bm > am) ? bm : am;
       res.notas = sinRepetir((a.notas || []).concat(b.notas || []));
       res.historial = sinRepetir((a.historial || []).concat(b.historial || [])).slice(-200);
       mios[k] = res;
     });
-    var al = estado.seg.config.alertas || [];
-    ((otro.config && otro.config.alertas) || []).forEach(function (x) { if (!al.some(function (y) { return y.fecha === x.fecha && y.texto === x.texto; })) al.push(x); });
-    if (al.length) estado.seg.config.alertas = al;
+    if (otro.config) juntarConfig(otro.config);
     return n;
+  }
+  // Sólo las ALERTAS se comparten (unión con lápidas). El resto de config es de cada navegador.
+  function juntarConfig(otra) {
+    otra = otra || {};
+    var al = sinRepetirAlertas((estado.seg.config.alertas || []).concat(otra.alertas || []));
+    if (al.length) estado.seg.config.alertas = al;
+    if ((otra.m || '') > (estado.seg.config.m || '')) estado.seg.config.m = otra.m;
+  }
+  // clave = fecha|texto|f (f = cuándo se creó): volver a agregar una alerta igual a una borrada
+  // crea una entrada nueva en vez de chocar con la lápida. Orden canónico para que los dos
+  // navegadores produzcan el mismo arreglo y no se reboten la config para siempre.
+  function claveAlerta(a) { return (a.fecha || '') + '|' + (a.texto || '') + '|' + (a.f || ''); }
+  function sinRepetirAlertas(arr) {
+    var v = {};
+    aArr(arr).forEach(function (a) { if (!a || typeof a !== 'object') return; var k = claveAlerta(a); if (!v[k] || a.x) v[k] = a; });
+    return Object.keys(v).sort().map(function (k) { return v[k]; });
   }
   function agregarNota(id, texto) {
     texto = (texto || '').trim(); if (!texto) return;
@@ -856,11 +929,12 @@
       case 'actualizar': actualizarInventario(false); break;
       case 'actualizar-rapido': actualizarInventario(true); break;
       case 'plantilla-reset': estado.seg.config.plantillaWA = ''; guardar(); render(); toast('Plantilla original'); break;
-      case 'alerta-agregar': var fe = $('#alerta-fecha').value, tx = $('#alerta-texto').value.trim(); if (!fe || !tx) { toast('Falta la fecha o el texto', 'error'); return; } var al = config('alertas', []).slice(); al.push({ fecha: fe, texto: tx }); estado.seg.config.alertas = al; guardar(); render(); toast('Alerta guardada', 'ok'); break;
+      case 'alerta-agregar': var fe = $('#alerta-fecha').value, tx = $('#alerta-texto').value.trim(); if (!fe || !tx) { toast('Falta la fecha o el texto', 'error'); return; } var al = (estado.seg.config.alertas || []).slice(); al.push({ fecha: fe, texto: tx, f: new Date().toISOString() }); estado.seg.config.alertas = sinRepetirAlertas(al); tocarConfig(); render(); toast('Alerta guardada', 'ok'); break;
       case 'exportar-seg': descargar('seguimiento-' + hoyISO() + '.json', JSON.stringify(estado.seg, null, 2), 'application/json'); break;
-      case 'borrar-seg': if (confirm('¿Borrar TODO el seguimiento (ofrecidas, notas, etapas)? El servidor guarda una copia por día en datos/respaldos/.')) { estado.seg = normSeg({ config: estado.seg.config }); guardarAhora(); render(); toast('Seguimiento vaciado'); } break;
-      case 'sync-conectar': var tv = ($('#sync-token').value || '').trim(); if (!tv) { toast('Pega el token primero', 'error'); return; } try { localStorage.setItem('prospector.token', tv); } catch (e2) { } toast('Probando el buzón…'); sincronizar('conectar').then(function () { if (!sincro.error) { toast('Sincronización activa', 'ok'); syncArrancar(); } render(); }); break;
-      case 'sync-quitar': try { localStorage.removeItem('prospector.token'); } catch (e3) { } clearInterval(sincro.reloj); sincro.ultimo = null; sincro.error = ''; toast('Token quitado de este navegador'); render(); break;
+      case 'borrar-seg': if (confirm('¿Borrar TODO el seguimiento (ofrecidas, notas, etapas)' + (sincro.sesion ? ', también en la nube y para el otro' : '') + '? El servidor guarda una copia por día en datos/respaldos/.')) { estado.seg = normSeg({ config: estado.seg.config }); espejo = {}; sincro.cola = {}; sincro.cursor = ''; guardarCola(); if (sincro.sesion) { sb().from('fichas').delete().neq('id', '').then(function (r) { if (r.error) toast('No se pudo borrar en la nube: ' + r.error.message, 'error'); }); } guardarAhora(); render(); toast('Seguimiento vaciado'); } break;
+      case 'sync-ahora': toast('Sincronizando…'); sincronizar('manual').then(function () { render(); }); break;
+      case 'sync-resubir': reconciliar(); toast('Volviendo a subir ' + enCola() + ' fichas…'); sincronizar('manual').then(function () { render(); }); break;
+      case 'sync-salir': salir(); break;
     }
   }
   function cambiarTema() {
@@ -869,150 +943,230 @@
     $('meta[name="theme-color"]').content = nuevo === 'claro' ? '#F2F4F7' : '#0B0F14';
   }
 
-  /* ---------- sincronización automática: el buzón cifrado en GitHub ---------- */
-  // El buzón es el repo PRIVADO cristalwebcl/prospector-sync: un solo archivo,
-  // seguimiento.enc, cifrado con la MISMA clave de la sociedad (formato PRSY1:
-  // "PRSY1" + salt16 + iv16 + hmac32 + AES-256-CBC del JSON). La app lo baja y
-  // lo funde al abrir, al volver a la pestaña y cada 30 s; y sube los cambios
-  // propios 4 s después de marcar algo. Para escribir necesita un token de
-  // GitHub acotado SOLO a ese repo, pegado una vez por navegador (Ajustes).
-  var sincro = { repo: 'cristalwebcl/prospector-sync', archivo: 'seguimiento.enc', rama: 'main', sha: null, remotoAct: '', sucio: false, ocupado: false, otraVez: false, timer: null, reloj: null, clave: '', ultimo: null, error: '' };
-  var encU8 = new TextEncoder(), decU8 = new TextDecoder();
-  function syncToken() { try { return (localStorage.getItem('prospector.token') || '').trim(); } catch (e) { return ''; } }
-  function syncClave() {
-    if (sincro.clave) return Promise.resolve(sincro.clave);
-    var c = ''; try { c = sessionStorage.getItem('prospector.clave') || localStorage.getItem('prospector.clave') || ''; } catch (e) { }
-    if (c) { sincro.clave = c.trim(); return Promise.resolve(sincro.clave); }
-    if (estado.servidor) return fetch('/api/clave').then(function (r) { return r.json(); }).then(function (j) { sincro.clave = (j.clave || '').trim(); return sincro.clave; }).catch(function () { return ''; });
-    return Promise.resolve('');
+  /* ---------- sincronización en vivo: Supabase ---------- */
+  // fichas = una fila por ficha (data = la ficha entera, m = data.m); config = fila 'sociedad'
+  // con las alertas compartidas. Cada cambio propio entra a una cola de ids (localStorage) y se
+  // sube 800 ms después; lo ajeno llega por Realtime y, por si el WebSocket falla, se baja
+  // "todo lo subido después de mi cursor" al abrir, al volver a la pestaña, al recuperar red
+  // y cada 30 s. Los ajustes personales (nombre, teléfono, plantilla, guión, meta) NO se
+  // suben: son de cada navegador. Después de la primera reconciliación la nube manda: una
+  // ficha que ya no está allá (la borró el otro) se quita de acá en la bajada completa.
+  var sincro = { sb: null, sesion: null, uid: '', socio: '', canal: null, vivo: false, cola: {}, cursor: '', ocupado: false, otraVez: false, timer: null, reloj: null, ultimo: null, error: '', pintar: null };
+  try {
+    sincro.cola = JSON.parse(localStorage.getItem('prospector.cola') || '{}') || {};
+    sincro.cursor = localStorage.getItem('prospector.cursor') || '';
+    localStorage.removeItem('prospector.token');   // el buzón de GitHub ya no existe
+  } catch (e0) { }
+  // 'falta' (sin js/config.js), 'ejemplo' (con los XXXX de la plantilla), 'ok'
+  function configEstado() { var c = window.PROSPECTOR_SUPABASE; if (!c || !c.url || !c.key) return 'falta'; if (/XXXX/.test(c.url + c.key)) return 'ejemplo'; return window.supabase ? 'ok' : 'falta'; }
+  function sb() {
+    if (sincro.sb) return sincro.sb;
+    if (configEstado() !== 'ok') return null;
+    var c = window.PROSPECTOR_SUPABASE;
+    sincro.sb = window.PROSPECTOR_SB || window.supabase.createClient(c.url, c.key);
+    return sincro.sb;
   }
-  function b64aBytes(b64) { var bin = atob(String(b64).replace(/[\r\n]/g, '')); var u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
-  function bytesAB64(u) { var s = ''; for (var i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192)); return btoa(s); }
-  function derivar(clave, salt) {
-    return crypto.subtle.importKey('raw', encU8.encode(clave), 'PBKDF2', false, ['deriveBits'])
-      .then(function (base) { return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: salt, iterations: 200000, hash: 'SHA-256' }, base, 512); })
-      .then(function (bits) {
-        var b = new Uint8Array(bits);
-        return Promise.all([
-          crypto.subtle.importKey('raw', b.slice(0, 32), { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']),
-          crypto.subtle.importKey('raw', b.slice(32, 64), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'])
-        ]);
-      }).then(function (ks) { return { aes: ks[0], mac: ks[1] }; });
+  function guardarCola() { try { localStorage.setItem('prospector.cola', JSON.stringify(sincro.cola)); localStorage.setItem('prospector.cursor', sincro.cursor); } catch (e) { } }
+  function enCola() { return Object.keys(sincro.cola).length; }
+  function reconciliado() { try { return !!localStorage.getItem('prospector.reconciliado'); } catch (e) { return false; } }
+  // JSON con claves ordenadas: jsonb las reordena y un JSON.stringify daría falsos "distinto"
+  function canon(x) {
+    if (Array.isArray(x)) return '[' + x.map(canon).join(',') + ']';
+    if (x && typeof x === 'object') return '{' + Object.keys(x).filter(function (k) { return x[k] !== undefined; }).sort().map(function (k) { return JSON.stringify(k) + ':' + canon(x[k]); }).join(',') + '}';
+    return JSON.stringify(x === undefined ? null : x);
   }
-  function cifrarSeg(obj, clave) {
-    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(16));
-    var plano = encU8.encode(JSON.stringify(obj));
-    return derivar(clave, salt).then(function (k) {
-      return crypto.subtle.encrypt({ name: 'AES-CBC', iv: iv }, k.aes, plano).then(function (cif) {
-        cif = new Uint8Array(cif);
-        var firmado = new Uint8Array(32 + cif.length); firmado.set(salt, 0); firmado.set(iv, 16); firmado.set(cif, 32);
-        return crypto.subtle.sign('HMAC', k.mac, firmado).then(function (mac) {
-          var out = new Uint8Array(69 + cif.length);
-          out.set([80, 82, 83, 89, 49], 0); out.set(salt, 5); out.set(iv, 21); out.set(new Uint8Array(mac), 37); out.set(cif, 69);
-          return out;
+  function filaDe(id) { var it = estado.seg.items[id]; return (it && it.m) ? { id: id, data: it, m: it.m } : null; }
+  function hora() { return new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+  function alertasDe(c) { return (c && c.alertas) || []; }
+  // funde una fila de afuera; true si cambió algo local. Si lo local quedó con MÁS que la fila
+  // (notas propias, campos más nuevos), se encola para subir la unión. El cursor avanza sólo
+  // desde bajar() (ordenado y sin huecos), nunca desde un evento suelto.
+  function aplicarFila(tabla, fila, desdeBajada) {
+    if (!fila || !fila.data) return false;
+    if (desdeBajada && fila.subida && fila.subida > sincro.cursor) sincro.cursor = fila.subida;
+    var antes, despues;
+    if (tabla === 'config') {
+      if (fila.id !== 'sociedad') return false;
+      antes = canon(alertasDe(estado.seg.config)); juntarConfig(fila.data); despues = canon(alertasDe(estado.seg.config));
+      if (despues !== canon(sinRepetirAlertas(alertasDe(fila.data)))) sincro.cola.config = 1;
+    } else {
+      var o = {}; o[fila.id] = fila.data;
+      antes = canon(estado.seg.items[fila.id] || null); juntarSeguimiento({ items: o }); despues = canon(estado.seg.items[fila.id]);
+      espejo[fila.id] = JSON.parse(JSON.stringify(estado.seg.items[fila.id]));
+      if (despues !== canon(fila.data)) sincro.cola[fila.id] = 1;
+    }
+    return antes !== despues;
+  }
+  // la API devuelve 1.000 filas como máximo por consulta: se pagina
+  function todasLasFilas(consulta) {
+    var acum = [];
+    return (function pagina(desde) {
+      return consulta().range(desde, desde + 999).then(function (r) {
+        if (r.error) throw new Error(r.error.message);
+        acum = acum.concat(r.data || []);
+        return (r.data && r.data.length === 1000) ? pagina(desde + 1000) : acum;
+      });
+    })(0);
+  }
+  function bajar(todo) {
+    var s = sb(); if (!s || !sincro.sesion || !sincro.socio) return Promise.resolve();
+    var cursor = sincro.cursor;
+    var qf = function () { var q = s.from('fichas').select('id,data,m,subida').order('subida').order('id'); return (!todo && cursor) ? q.gt('subida', cursor) : q; };
+    var qc = function () { var q = s.from('config').select('id,data,m,subida').eq('id', 'sociedad'); return (!todo && cursor) ? q.gt('subida', cursor) : q; };
+    return Promise.all([todasLasFilas(qf), todasLasFilas(qc)]).then(function (rs) {
+      var cambio = false, enNube = {};
+      rs[0].forEach(function (f) { enNube[f.id] = 1; if (aplicarFila('fichas', f, true)) cambio = true; });
+      rs[1].forEach(function (f) { if (aplicarFila('config', f, true)) cambio = true; });
+      if (todo && reconciliado()) {
+        // bajada completa después de la primera reconciliación: lo que no está en la nube y no
+        // está por subir, lo borró el otro (o «Borrar todo»): se quita de acá también
+        Object.keys(estado.seg.items).forEach(function (id) { if (!enNube[id] && !sincro.cola[id] && estado.seg.items[id].m) { delete estado.seg.items[id]; delete espejo[id]; cambio = true; } });
+      }
+      guardarCola();
+      if (cambio) { persistir(); render(); refrescarFicha(); }
+    });
+  }
+  function subirCola() {
+    var s = sb(); if (!s || !sincro.sesion || !sincro.socio) return Promise.resolve();
+    var ids = Object.keys(sincro.cola).filter(function (k) { return k !== 'config'; });
+    ids.forEach(function (id) { if (!filaDe(id)) delete sincro.cola[id]; });   // sin m no hay nada que subir
+    var filas = ids.map(filaDe).filter(Boolean), p = Promise.resolve(), rechazo = false;
+    if (filas.length) {
+      p = s.from('fichas').upsert(filas, { onConflict: 'id' }).select('id').then(function (r) {
+        if (r.error) throw new Error(r.error.message);
+        (r.data || []).forEach(function (f) { delete sincro.cola[f.id]; });
+        if ((r.data || []).length < filas.length) rechazo = true;   // el trigger tenía una versión más nueva
+      });
+    }
+    if (sincro.cola.config) {
+      p = p.then(function () {
+        var c = estado.seg.config, data = { alertas: sinRepetirAlertas(alertasDe(c)), m: c.m || '' };
+        return s.from('config').upsert({ id: 'sociedad', data: data, m: data.m }, { onConflict: 'id' }).select('id').then(function (r) {
+          if (r.error) throw new Error(r.error.message);
+          if (r.data && r.data.length) delete sincro.cola.config; else rechazo = true;
         });
       });
+    }
+    return p.then(function () {
+      guardarCola();
+      // lo rechazado: bajar todo, fundir y volver a subir la unión (converge en dos vueltas)
+      if (rechazo) return bajar(true).then(function () { sincro.otraVez = true; });
     });
   }
-  function descifrarSeg(bytes, clave) {
-    if (decU8.decode(bytes.slice(0, 5)) !== 'PRSY1') return Promise.reject(new Error('el buzón no tiene el formato esperado'));
-    var salt = bytes.slice(5, 21), iv = bytes.slice(21, 37), mac = bytes.slice(37, 69), cif = bytes.slice(69);
-    return derivar(clave, salt).then(function (k) {
-      var firmado = new Uint8Array(32 + cif.length); firmado.set(salt, 0); firmado.set(iv, 16); firmado.set(cif, 32);
-      return crypto.subtle.verify('HMAC', k.mac, mac, firmado).then(function (ok) {
-        if (!ok) throw new Error('la clave no calza con el buzón');
-        return crypto.subtle.decrypt({ name: 'AES-CBC', iv: iv }, k.aes, cif);
+  function sincronizar(motivo) {
+    if (!sincro.sesion || !sincro.socio) return Promise.resolve();
+    if (sincro.ocupado) { sincro.otraVez = true; return Promise.resolve(); }
+    sincro.ocupado = true;
+    return bajar(motivo === 'inicio' || motivo === 'manual').then(subirCola).then(function () {
+      sincro.ultimo = new Date();
+      pintarSync((sincro.vivo ? 'En vivo · ' : 'Al día · ') + hora() + (enCola() ? ' · ' + enCola() + ' en cola' : ''));
+    }).catch(function (e) {
+      console.warn('[sync]', motivo, e);
+      var msg = e && e.message ? e.message : String(e);
+      if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) msg = 'sin red: los cambios quedan en cola (' + enCola() + ')';
+      pintarSync('Sin sincronizar: ' + msg, true);
+    }).then(function () { sincro.ocupado = false; if (sincro.otraVez) { sincro.otraVez = false; return sincronizar('cola'); } });
+  }
+  function syncMarcar(id) {
+    if (id) { sincro.cola[id] = 1; guardarCola(); }
+    if (!sincro.sesion || !sincro.socio) { pintarCola(); return; }
+    clearTimeout(sincro.timer); sincro.timer = setTimeout(function () { sincronizar('cambio'); }, 800);
+  }
+  function pintarCola() { if (!estado.servidor && !sincro.sesion && enCola()) marcarConexion('lectura', 'Sin sesión · ' + enCola() + ' en cola'); }
+  // los efectos de una ráfaga de eventos (la primera subida del otro trae cientos) se agrupan
+  var pintarEventos = debounce(function () { persistir(); render(); refrescarFicha(); }, 200);
+  function evento(tabla, p) {
+    if (p.eventType === 'DELETE') {
+      var id = p.old && p.old.id;
+      if (tabla === 'fichas' && id && estado.seg.items[id]) { delete estado.seg.items[id]; delete espejo[id]; delete sincro.cola[id]; guardarCola(); pintarEventos(); }
+      return;
+    }
+    var cambio = aplicarFila(tabla, p.new, false); guardarCola();
+    if (cambio) pintarEventos();
+    if (enCola()) syncMarcar();
+  }
+  function suscribir() {
+    var s = sb(); if (!s || sincro.canal) return;
+    sincro.canal = s.channel('seguimiento')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fichas' }, function (p) { evento('fichas', p); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'config' }, function (p) { evento('config', p); })
+      .subscribe(function (st) {
+        var vivo = st === 'SUBSCRIBED';
+        if (vivo && !sincro.vivo) sincronizar('reconexion');   // Realtime no repite lo perdido: se pide con subida > cursor
+        sincro.vivo = vivo;
+        if (!vivo && st !== 'CLOSED') pintarSync('En vivo caído (' + st + '): reintentando; mientras, revisa cada 30 s', true);
       });
-    }).then(function (plano) { return JSON.parse(decU8.decode(new Uint8Array(plano))); });
   }
-  function ghCab() { return { 'Authorization': 'Bearer ' + syncToken(), 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }; }
-  function ghUrl() { return 'https://api.github.com/repos/' + sincro.repo + '/contents/' + sincro.archivo; }
-  function ghBajar() {
-    return fetch(ghUrl() + '?ref=' + sincro.rama + '&t=' + Date.now(), { headers: ghCab(), cache: 'no-store' }).then(function (r) {
-      if (r.status === 404) return null;
-      if (r.status === 401 || r.status === 403) throw new Error('el token no sirve o venció (' + r.status + ')');
-      if (!r.ok) throw new Error('GitHub respondió ' + r.status);
-      return r.json().then(function (j) { return { bytes: b64aBytes(j.content), sha: j.sha }; });
+  function quienSoy(ses) {
+    var correo = String((ses && ses.user && ses.user.email) || '').toLowerCase();
+    return sb().from('socios').select('nombre').eq('email', correo).maybeSingle().then(function (r) {
+      if (r.error) throw new Error(r.error.message);
+      if (!r.data) throw new Error('la cuenta ' + correo + ' no está en la tabla socios: nada se sube ni se baja');
+      sincro.socio = r.data.nombre;
+      // la firma es de la MÁQUINA, no de la cuenta: así una cuenta compartida sigue distinguiendo
+      // quién llamó. El nombre de socios sólo sirve de valor inicial la primera vez.
+      var elegido = null; try { elegido = localStorage.getItem('prospector.usuario'); } catch (e) { }
+      if (!elegido && PERSONAS.indexOf(r.data.nombre) >= 0) setUsuario(r.data.nombre);
     });
   }
-  function ghSubir(bytes, reintento) {
-    var cuerpo = { message: 'sync ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' · ' + estado.usuario, content: bytesAB64(bytes), branch: sincro.rama };
-    if (sincro.sha) cuerpo.sha = sincro.sha;
-    return fetch(ghUrl(), { method: 'PUT', headers: ghCab(), body: JSON.stringify(cuerpo) }).then(function (r) {
-      if ((r.status === 409 || r.status === 422) && !reintento) {
-        // el otro guardó justo antes: bajar lo suyo, fundir y reintentar UNA vez
-        return ghBajar().then(function (rr) {
-          if (!rr) return;
-          sincro.sha = rr.sha;
-          return descifrarSeg(rr.bytes, sincro.clave).then(function (rem) { juntarSeguimiento(normSeg(rem)); persistir(); });
-        }).then(function () { return cifrarSeg(estado.seg, sincro.clave); }).then(function (b2) { return ghSubir(b2, 1); });
-      }
-      if (!r.ok) throw new Error('no se pudo subir al buzón (' + r.status + ')');
-      return r.json().then(function (j) { return j.content.sha; });
-    });
+  // primera vez tras la migración (o a pedido): encolar TODO lo local; el trigger deja pasar sólo lo más nuevo
+  function reconciliar() {
+    Object.keys(estado.seg.items).forEach(function (id) { if (filaDe(id)) sincro.cola[id] = 1; });
+    if (alertasDe(estado.seg.config).length) { if (!estado.seg.config.m) estado.seg.config.m = new Date().toISOString(); sincro.cola.config = 1; }
+    guardarCola();
   }
   function pintarSync(txt, esError) {
     sincro.error = esError ? txt : '';
     var e = $('#sync-estado'); if (e) { e.textContent = txt; e.style.color = esError ? 'var(--peligro)' : 'var(--ok)'; }
-    if (!esError && !estado.servidor) marcarConexion('ok', 'Sincronizado ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }));
+    if (!estado.servidor) marcarConexion(esError ? 'lectura' : 'ok', esError ? txt.slice(0, 48) : (sincro.vivo ? 'En vivo ' : 'Sincronizado ') + hora().slice(0, 5));
   }
-  function sincronizar(motivo) {
-    if (!syncToken()) return Promise.resolve();
-    if (sincro.ocupado) { sincro.otraVez = true; return Promise.resolve(); }
-    sincro.ocupado = true;
-    return syncClave().then(function (clave) {
-      if (!clave) throw new Error('este navegador no tiene la clave de la sociedad');
-      return ghBajar().then(function (r) {
-        var listo = Promise.resolve();
-        if (r && r.sha !== sincro.sha) {
-          listo = descifrarSeg(r.bytes, clave).then(function (remoto) {
-            var antes = JSON.stringify(estado.seg);
-            juntarSeguimiento(normSeg(remoto));
-            // el sha se anota DESPUÉS de fundir: si la fusión falla, el próximo ciclo reintenta
-            sincro.sha = r.sha; sincro.remotoAct = remoto.actualizado || '';
-            if ((remoto.actualizado || '') > (estado.seg.actualizado || '')) estado.seg.actualizado = remoto.actualizado;
-            if (JSON.stringify(estado.seg) !== antes) { persistir(); render(); refrescarFicha(); }
-          }, function (err) {
-            // buzón con basura (formato malo): se sobreescribe con lo local.
-            // Clave que no calza: eso SÍ es error de verdad, no se pisa nada.
-            if (String(err && err.message).indexOf('formato') >= 0) { sincro.sha = r.sha; sincro.remotoAct = ''; sincro.sucio = true; }
-            else throw err;
-          });
-        } else if (r) { sincro.sha = r.sha; }
-        return listo.then(function () {
-          var subir = !r || sincro.sucio || ((estado.seg.actualizado || '') > (sincro.remotoAct || ''));
-          if (!subir) return;
-          return cifrarSeg(estado.seg, clave).then(function (b) { return ghSubir(b); }).then(function (sha) {
-            sincro.sha = sha; sincro.sucio = false; sincro.remotoAct = estado.seg.actualizado || '';
-          });
-        });
-      });
-    }).then(function () {
-      sincro.ultimo = new Date();
-      pintarSync('Al día · ' + sincro.ultimo.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    }).catch(function (e) {
-      console.warn('[sync] error:', e);
-      pintarSync('Sin sincronizar: ' + (e && e.message ? e.message : e), true);
-    }).then(function () {
-      sincro.ocupado = false;
-      if (sincro.otraVez) { sincro.otraVez = false; return sincronizar('cola'); }
-    });
+  // arranque por ESTADO, no por evento: supabase-js emite SIGNED_IN cada vez que vuelve la
+  // pestaña; sólo se arranca cuando cambia la cuenta (uid) y se para cuando la sesión se va
+  function arrancarSesion(ses) {
+    sincro.uid = ses.user.id;
+    quienSoy(ses).then(function () {
+      if (!reconciliado()) reconciliar();
+      suscribir();
+      return sincronizar('inicio').then(function () { if (!sincro.error) { try { localStorage.setItem('prospector.reconciliado', '1'); } catch (e) { } } });
+    }).catch(function (e) { pintarSync('Sin sincronizar: ' + (e && e.message ? e.message : e), true); }).then(function () { if (estado.vista === 'ajustes') render(); });
   }
-  // gancho de depuración: PROSPECTOR_DEBUG.sincronizar() desde la consola
-  try { window.PROSPECTOR_DEBUG = { sincronizar: sincronizar, sincro: sincro, juntar: function (o) { return juntarSeguimiento(normSeg(o)); } }; } catch (eDbg) { }
-  function syncMarcar() {
-    if (!syncToken()) return;
-    sincro.sucio = true;
-    clearTimeout(sincro.timer);
-    sincro.timer = setTimeout(function () { sincronizar('cambio'); }, 4000);
+  function pararSesion() {
+    var s = sb();
+    sincro.uid = ''; sincro.socio = ''; sincro.vivo = false;
+    if (sincro.canal && s) { s.removeChannel(sincro.canal); sincro.canal = null; }
+    pintarSync('Sin sesión: Ajustes → Entrar' + (enCola() ? ' · ' + enCola() + ' cambios en cola' : ''), true);
+    if (estado.vista === 'ajustes') render();
   }
   function syncArrancar() {
-    if (!syncToken()) return;
-    sincronizar('inicio');
+    var s = sb();
+    if (!s) { pintarSync(configEstado() === 'ejemplo' ? 'js/config.js todavía tiene los valores de ejemplo: modo manual (exportar / importar)' : 'Falta js/config.js: modo manual (exportar / importar)', true); pintarCola(); return; }
+    s.auth.onAuthStateChange(function (ev, ses) {
+      sincro.sesion = ses || null;
+      setTimeout(function () {   // fuera del callback: supabase-js pide no llamar a la API desde adentro
+        if (ses && ses.user && ses.user.id !== sincro.uid) arrancarSesion(ses);
+        else if (!ses && sincro.uid) pararSesion();
+        else if (!ses && ev === 'INITIAL_SESSION') pintarSync('Sin sesión: Ajustes → Entrar' + (enCola() ? ' · ' + enCola() + ' cambios en cola' : ''), true);
+      }, 0);
+    });
     clearInterval(sincro.reloj);
     sincro.reloj = setInterval(function () { if (!document.hidden) sincronizar('reloj'); }, 30000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) sincronizar('vuelta'); });
+    window.addEventListener('online', function () { sincronizar('red'); });
   }
+  function entrar(correo, pass) {
+    var s = sb(); if (!s) { toast(configEstado() === 'ejemplo' ? 'js/config.js todavía tiene los valores de ejemplo' : 'Falta js/config.js con la conexión a Supabase', 'error'); return Promise.resolve(); }
+    return s.auth.signInWithPassword({ email: correo, password: pass }).then(function (r) {
+      if (r.error) { toast(/invalid login/i.test(r.error.message) ? 'Correo o contraseña incorrectos' : r.error.message, 'error'); return; }
+      toast('Sesión iniciada', 'ok');   // el resto lo dispara onAuthStateChange (SIGNED_IN)
+    }).catch(function (e) { toast('No se pudo entrar: ' + (e && e.message ? e.message : e), 'error'); });
+  }
+  function salir() {
+    var s = sb(); if (!s) return;
+    if (enCola() && !confirm('Hay ' + enCola() + ' cambios sin subir. ¿Salir igual? Quedan guardados en este navegador y se suben al volver a entrar.')) return;
+    // scope local: cierra ESTE navegador, no las sesiones del celular y el otro computador
+    s.auth.signOut({ scope: 'local' }).then(function () { try { localStorage.removeItem('prospector.clave'); sessionStorage.removeItem('prospector.clave'); } catch (e) { } if (enBoveda()) location.reload(); else render(); });
+  }
+  try { window.PROSPECTOR_DEBUG = { sincronizar: sincronizar, sincro: sincro, reconciliar: reconciliar, juntar: function (o) { return juntarSeguimiento(normSeg(o)); }, estado: estado, espejo: function () { return espejo; } }; } catch (eDbg) { }
 
   /* ---------- arranque ---------- */
   function arrancar() {
@@ -1020,10 +1174,11 @@
     pintarUsuario();
     eventos();
     cargar().then(function () {
+      espejo = JSON.parse(JSON.stringify(estado.seg.items || {}));   // cómo estaba cada ficha al abrir: contra esto se sella por campo
       if (!estado.datos) { $('#vista-hoy').innerHTML = '<div class="vacio"><b>Sin datos</b>Corre <code>actualizar.ps1</code> o abre la app con Prospector.cmd.</div>'; marcarConexion('lectura', 'Sin inventario'); return; }
       if (estado.servidor) { marcarConexion('ok', 'Servidor local · ' + estado.datos.generado); }
       else if (esFile()) { marcarConexion('lectura', 'Modo lectura (file://)'); var av = $('#aviso'); av.hidden = false; av.innerHTML = ico('alerta') + ' <span>Abierta sin servidor: lo que marques queda sólo en este navegador. Para guardar de verdad y abrir carpetas, usa <b>Prospector.cmd</b>.</span>'; }
-      else if (enBoveda()) { marcarConexion('ok', 'Publicada · ' + estado.datos.generado); var av4 = $('#aviso'); av4.hidden = false; av4.innerHTML = ico('alerta') + ' <span>Versión publicada (cifrada). Lo que marques queda en este navegador; para juntarlo con el otro, Ajustes → Exportar JSON / Importar y juntar. Se actualiza con <b>publicar.ps1</b> desde el repo privado.</span>'; }
+      else if (enBoveda()) { marcarConexion('ok', 'Publicada · ' + estado.datos.generado); }
       else { marcarConexion('lectura', 'Versión compartida · ' + estado.datos.generado); var av3 = $('#aviso'); av3.hidden = false; av3.innerHTML = ico('alerta') + ' <span>Versión compartida: lo que marques queda en este navegador. Para pasarle el seguimiento al otro, Ajustes → Exportar JSON, y el otro lo importa.</span>'; }
       if (estado.servidor && estado.datos.excelFecha && estado.datos.excelFecha > estado.datos.generado) { var av2 = $('#aviso'); av2.hidden = false; av2.innerHTML = ico('alerta') + ' <span>El Excel cambió después del último inventario.</span><button class="btn btn-chico btn-primario" data-accion="actualizar">Actualizar ahora</button>'; }
       var h = leerHash(); irA(h.vista, h.id);
