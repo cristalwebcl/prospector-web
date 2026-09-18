@@ -57,6 +57,19 @@
   var CANALES = ['llamada', 'whatsapp', 'visita', 'correo', 'instagram'];
   var PLANTILLA_WA = 'Hola, ¿hablo con {nombre}? Soy {yo}, desarrollador web de Loncoche.\n\nLes armé una página de muestra, sin compromiso, para que la vean en el celular: {url}\n\n{gancho}\n\nSi les interesa, la afinamos con sus fotos y queda lista en una semana. ¿Le parece que conversemos?';
   var GUION = '1. Presentarse: nombre, de Loncoche, hago páginas para negocios de la zona.\n2. El gancho (lo que le pasa hoy a SU negocio en Google).\n3. «Le hice una muestra, ¿se la mando por WhatsApp?»\n4. Si dice que sí: mandar el link y agendar cuándo volver a llamar.\n5. Si dice que no: preguntar por qué, anotar, y no insistir.';
+
+  /* ---- mensaje para ofrecer la página (CristalWeb) ----------------------
+     La plantilla editable lleva dos bloques que arma el código: {porque}
+     (con cifras si las hay) y {link} (publicada, sin subir, o sin demo).
+     Todo dato que falte se borra con su frase entera, nunca queda coja. */
+  var PLANTILLA_OFERTA = 'Hola, buenas. Soy {yo}, de CristalWeb: somos dos socios de Loncoche que hacemos páginas web para negocios chicos, simples, rápidas en el celular y que se pagan una sola vez.\n\n{porque}\n\n{link}\n\nTodo se cambia a su gusto: colores, fotos, textos, agregar servicios, precios, horarios, lo que falte; y lo que no les guste, se saca.\n\nConversarlo no cuesta nada y no los compromete a nada. Si les sirve seguimos, y si no, no hay ningún problema.\n\nGracias por el tiempo. Si prefiere que no le escribamos más, dígamelo y no lo molestamos de nuevo.';
+  var PORQUE_NUMEROS = 'Nos fijamos en {nombre} porque su {rubro} en {ciudad} tiene {resenas} reseñas con {nota} de nota: la gente los recomienda, pero al buscarlos en Google no aparece nada propio de ustedes, sólo la ficha del mapa.';
+  var PORQUE_SIMPLE = 'Nos fijamos en {nombre} porque se ve que les está yendo bien en {ciudad}, y al buscarlos en Google no aparece nada propio de ustedes: sólo la ficha del mapa.';
+  var LINK_PUBLICADA = 'Nos tomamos el atrevimiento de hacerles una página de muestra, para que no tengan que imaginársela:\n{url}\n{pieza}';
+  var LINK_SIN_SUBIR = 'Nos tomamos el atrevimiento de hacerles una página de muestra, para que no tengan que imaginársela. Todavía no la subimos a internet: le mando unas fotos de cómo quedó, o la publico hoy y le paso el link.\n{pieza}';
+  var LINK_OFRECER = 'Por eso queríamos proponerles hacerles una página: con sus fotos, sus servicios, los horarios y un botón de WhatsApp que llegue directo a este número. Si quiere le armamos una muestra primero, usted la ve y después decide.';
+  var PLANTILLA_SEGUNDO = 'Hola, buenas. Soy {yo}, de CristalWeb. Hace unos días les dejé una página de muestra de {nombre}.\n{link}\nNo es para apurarlos, era por si el mensaje se perdió. Cualquier cosa me escribe por acá.\n\nSi prefiere que no le escribamos más, dígamelo y listo.';
+  var SEGUNDO_LINK = 'Acá va de nuevo por si se perdió: {url}\n';
   var estado = {
     datos: null, seg: { version: 1, items: {}, config: {} }, servidor: false,
     usuario: localStorage.getItem('prospector.usuario') || 'Yordy',
@@ -113,7 +126,7 @@
   // guardarAhora() es para cambios propios: sella la hora y avisa al buzón
   function persistir() {
     var txt = JSON.stringify(estado.seg);
-    try { localStorage.setItem('prospector.seg', txt); } catch (e) { }
+    try { localStorage.setItem('prospector.seg', txt); } catch (e) { toast('El navegador se quedó sin espacio: el seguimiento no se guardó acá', 'error'); }
     if (!estado.servidor) return Promise.resolve();
     return fetch('/api/seguimiento', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: txt })
       .then(function (r) { if (!r.ok) throw new Error(r.status); marcarConexion('ok', 'Guardado ' + new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })); })
@@ -136,7 +149,7 @@
   // Desde el 07-09-2026 además sella POR CAMPO (it.mc[campo] = hora) comparando contra el espejo,
   // la copia de cómo estaba la ficha la última vez que se tocó o se recibió de la nube: así dos
   // personas que cambian campos distintos de la misma ficha no se pisan al fundir.
-  var CAMPOS_FICHA = ['ofrecida', 'fechaOfrecida', 'canal', 'resultado', 'proximo', 'prioridad', 'pedirDemo', 'quien', 'pendiente', 'motivo'];
+  var CAMPOS_FICHA = ['ofrecida', 'fechaOfrecida', 'canal', 'resultado', 'proximo', 'prioridad', 'pedirDemo', 'quien', 'pendiente', 'motivo', 'mensaje'];
   // campos que la app cambia en bloque y que sólo tienen sentido juntos: se funden como uno
   var GRUPOS_FICHA = [['ofrecida', 'fechaOfrecida', 'resultado'], ['pendiente', 'motivo']];
   var espejo = {};
@@ -202,6 +215,71 @@
   }
   function linkWA(d) { return 'https://wa.me/' + d.telDigitos + '?text=' + encodeURIComponent(textoWA(d)); }
   function linkTel(d) { return 'tel:+' + d.telDigitos; }
+
+  /* ---------- mensaje para ofrecer la página ----------
+     Un prospecto se adapta a la forma de una demo para poder usar las mismas
+     funciones; la única diferencia es que todavía no hay página que mostrar. */
+  function adaptarProspecto(p) {
+    return { id: idProspecto(p), nombre: p.negocio, tel: p.tel, telDigitos: p.telDigitos, url: '', gancho: p.gancho,
+             ciudad: p.ciudad, rubro: p.rubro, resenas: p.resenas, nota: p.nota, pieza: '', esProspecto: true };
+  }
+  function objetoDe(id) { var d = buscarDemo(id); if (d) return d; var p = buscarProspecto(id); return p ? adaptarProspecto(p) : null; }
+  function frasePieza(p) {
+    var s = String(p || '').trim(); if (!s) return '';
+    return 'Adentro le pusimos algo que no muestra nadie más: ' + s.charAt(0).toLowerCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.');
+  }
+  // cada dato vive en una frase o en un segmento propio: si falta, se borra entero
+  function rellenar(pl, d) {
+    return String(pl)
+      .replace(/\{pieza\}/g, frasePieza(d.pieza))
+      .replace(/\{nombre\}/g, d.nombre || 'ustedes')
+      .replace(/\{rubro\}/g, (d.rubro || 'negocio').toLowerCase())
+      .replace(/ en \{ciudad\}/g, d.ciudad ? ' en ' + d.ciudad : '')
+      .replace(/\{ciudad\}/g, d.ciudad || '')
+      .replace(/\{resenas\}/g, fmt(d.resenas))
+      .replace(/\{nota\}/g, fmtNota(d.nota))
+      .replace(/\{url\}/g, d.url || '')
+      .replace(/\{gancho\}/g, d.gancho || '')
+      .replace(/\{yo\}/g, config('nombre', 'Yordy Serna'))
+      .replace(/[ \t]{2,}/g, ' ').replace(/ +([,.:;])/g, '$1')
+      .replace(/^[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  // con cifras sólo si las dos existen y dicen algo; si no, la versión sin números
+  function porqueDe(d) {
+    var r = Number(d.resenas) || 0, n = Number(d.nota) || 0;
+    return (r >= 20 && n >= 4.3) ? PORQUE_NUMEROS : PORQUE_SIMPLE;
+  }
+  function textoOferta(d) {
+    var bl = d.esProspecto ? LINK_OFRECER : (d.url ? LINK_PUBLICADA : LINK_SIN_SUBIR);
+    return rellenar(config('plantillaOferta', PLANTILLA_OFERTA).replace(/\{porque\}/g, porqueDe(d)).replace(/\{link\}/g, bl), d);
+  }
+  function textoSegundo(d) {
+    return rellenar(config('plantillaSegundo', PLANTILLA_SEGUNDO).replace(/\{link\}/g, d.url ? SEGUNDO_LINK : ''), d);
+  }
+  // lo que se ve AHORA en el recuadro: el textarea vivo manda sobre lo guardado
+  function valorMensaje(id) {
+    var ta = $('[data-mensaje="' + CSS.escape(id) + '"]'); if (ta) return ta.value;
+    var g = itemLectura(id).mensaje; if (g) return g;
+    var d = objetoDe(id); return d ? textoOferta(d) : '';
+  }
+  // el sello se pone al salir del campo, no por tecla: tocar() dispara guardar() y la cola
+  var mensajePendiente = '';
+  function sellarMensaje() { if (!mensajePendiente) return; var id = mensajePendiente; mensajePendiente = ''; tocar(id); }
+  var sellarMensajeLuego = debounce(sellarMensaje, 1200);
+  function bloqueMensaje(id, d, it) {
+    var txt = it.mensaje || textoOferta(d), propio = !!it.mensaje;
+    return '<section class="ficha-seccion"><h3>Mensaje para ofrecerla' + (propio ? '<span class="der insignia acento">editado a mano</span>' : '') + '</h3>' +
+      '<div class="mensaje' + (propio ? ' editado' : '') + '">' +
+        '<textarea class="entrada" data-mensaje="' + esc(id) + '" maxlength="2000" rows="14" spellcheck="true">' + esc(txt) + '</textarea>' +
+        '<div class="mensaje-pie">' +
+          '<button class="btn btn-chico btn-primario" data-accion="mensaje-copiar" data-id="' + esc(id) + '">' + ico('copiar') + ' Copiar</button>' +
+          (esMovil(d) ? '<button class="btn btn-chico" data-accion="mensaje-wa" data-id="' + esc(id) + '">' + ico('wa') + ' Mandar por WhatsApp</button>' : '') +
+          '<button class="btn btn-chico btn-fantasma" data-accion="mensaje-segundo" data-id="' + esc(id) + '">Segundo toque</button>' +
+          '<button class="btn btn-chico btn-fantasma" data-accion="mensaje-auto" data-id="' + esc(id) + '">Volver al automático</button>' +
+          '<span class="der">' + txt.length + ' caracteres</span>' +
+        '</div>' +
+      '</div></section>';
+  }
 
   /* ---------- toasts, conexión, avisos ---------- */
   function toast(msg, tipo) {
@@ -548,6 +626,10 @@
         '<p class="plantilla-ayuda">Se reemplazan <code>{nombre}</code>, <code>{url}</code>, <code>{gancho}</code>, <code>{ciudad}</code> y <code>{yo}</code>. Si la demo no está publicada, <code>{url}</code> avisa en vez de mandar un link roto.</p>' +
         '<label class="campo">Guión de llamada (se muestra en la ficha)<textarea data-config="guion" rows="6">' + esc(config('guion', GUION)) + '</textarea></label>' +
       '</div></section>' +
+      '<section class="panel"><div class="panel-cab"><h2>Mensaje para ofrecerla</h2><div class="der"><button class="btn btn-chico btn-fantasma" data-accion="mensaje-reset">Volver al original</button></div></div><div class="campos">' +
+        '<label class="campo">Plantilla<textarea data-config="plantillaOferta" rows="14">' + esc(config('plantillaOferta', PLANTILLA_OFERTA)) + '</textarea></label>' +
+        '<p class="plantilla-ayuda">La app arma sola dos bloques: <code>{porque}</code> (con reseñas y nota si las hay, sin cifras si no) y <code>{link}</code> (demo publicada, demo sin subir, o prospecto sin demo). Además se reemplazan <code>{nombre}</code>, <code>{rubro}</code>, <code>{ciudad}</code>, <code>{pieza}</code>, <code>{gancho}</code> y <code>{yo}</code>; el que no tenga dato se borra con su frase entera. Es de este navegador, igual que la de WhatsApp.</p>' +
+      '</div></section>' +
       '<section class="panel"><div class="panel-cab"><h2>Alertas con fecha</h2></div><div class="lista-alertas">' + (al.length ? al.map(function (a, i) { return '<div class="fila-alerta"><time>' + esc(fechaCorta(a.fecha)) + '</time><span>' + esc(a.texto) + '</span><button class="btn-icono" data-alerta-borrar="' + i + '" title="Quitar">' + ico('x') + '</button></div>'; }).join('') : '<p class="silencio" style="margin:0;font-size:13px">Las de datos/alertas.json las mantiene Claude; acá van las tuyas.</p>') + '</div>' +
         '<div class="campos" style="grid-template-columns:140px 1fr auto;align-items:end"><label class="campo">Fecha<input type="date" id="alerta-fecha" value="' + hoyISO() + '"></label><label class="campo">Texto<input id="alerta-texto" placeholder="Ej.: vence el dominio de …"></label><button class="btn btn-primario" data-accion="alerta-agregar">' + ico('mas') + ' Agregar</button></div></section>' +
       '<section class="panel"><div class="panel-cab"><h2>Inventario</h2></div><div class="info-lista">' +
@@ -585,6 +667,7 @@
 
   /* ---------- FICHA ---------- */
   function abrirFicha(id) {
+    sellarMensaje();
     var d = buscarDemo(id), p = d ? null : buscarProspecto(id);
     if (!d && !p) return;
     estado.sel = id; estado.idx = estado.visibles.indexOf(id);
@@ -600,7 +683,7 @@
     }
   }
   function cerrarFicha(silencio) {
-    var f = $('#ficha'); if (f.hidden) return;
+    var f = $('#ficha'); if (f.hidden) return; sellarMensaje();
     f.classList.remove('abierta'); $('#velo').hidden = true; $('#app').classList.remove('con-ficha');
     setTimeout(function () { f.hidden = true; f.innerHTML = ''; }, 230);
     estado.sel = null;
@@ -663,9 +746,10 @@
         (d.url ? '<button class="btn" data-copiar="' + esc(d.url) + '">' + ico('copiar') + ' Copiar link</button>' : '') +
         (estado.servidor ? '<button class="btn" data-abrir="demos/' + esc(d.carpeta) + '">' + ico('carpeta') + ' Carpeta</button>' : '') +
         (d.repo ? '<a class="btn btn-fantasma" href="' + esc(d.repo.replace(/\.git$/, '')) + '" target="_blank" rel="noopener">' + ico('github') + ' Repo</a>' : '') +
-        (esMovil(d) ? '<button class="btn btn-fantasma" data-copiar-wa="' + esc(d.id) + '">' + ico('copiar') + ' Copiar mensaje</button>' : '') +
+        (esMovil(d) ? '<button class="btn btn-fantasma" data-copiar-wa="' + esc(d.id) + '">' + ico('copiar') + ' Copiar saludo corto</button>' : '') +
       '</div>' +
       (!d.url && esMovil(d) ? '<div class="aviso" style="margin:0">' + ico('alerta') + ' La demo no está publicada: el mensaje de WhatsApp no lleva link. Publícala primero o mándale una captura.</div>' : '') +
+      bloqueMensaje(d.id, d, it) +
       '<section class="ficha-seccion"><h3>Seguimiento <span class="der" style="color:' + e.color + '">' + esc(e.nombre) + (it.pendiente ? ' · pendiente' : '') + '</span></h3>' + bloqueSeguimiento(d.id, it, false) + '</section>' +
       bloqueNotas(d.id, it) +
       (d.gancho ? '<section class="ficha-seccion"><h3>Gancho de llamada</h3><blockquote class="gancho">' + esc(d.gancho) + '</blockquote></section>' : '') +
@@ -682,19 +766,20 @@
       '</div>';
   }
   function fichaProspecto(p) {
-    var id = idProspecto(p), it = item(id), d = { id: id, nombre: p.negocio, tel: p.tel, telDigitos: p.telDigitos, url: '', gancho: p.gancho, ciudad: p.ciudad };
+    var d = adaptarProspecto(p), id = d.id, it = item(id);
     return '<div class="ficha-cab" style="aspect-ratio:auto;min-height:120px;--c1:#1a2430;--c2:#2a3a4c"><div class="sin" style="position:relative;height:120px">Prospecto sin demo</div><button class="btn-icono cerrar" data-accion="cerrar-ficha" aria-label="Cerrar">' + ico('x') + '</button></div>' +
       '<div class="ficha-cuerpo">' +
       '<div class="ficha-titulo"><span class="num">' + esc(p.hoja) + ' · fila ' + p.fila + '</span><h2>' + esc(p.negocio) + '</h2><p>' + esc(p.rubro || '—') + (p.ciudad ? ' · ' + esc(p.ciudad) : '') + (p.zona ? ' · ' + esc(p.zona) : '') + '</p></div>' +
       '<div class="ficha-acciones"><a class="btn llamar' + (p.telDigitos ? '' : ' desactivado') + '" href="tel:+' + esc(p.telDigitos) + '" data-registrar="llamada" data-id="' + esc(id) + '">' + ico('tel') + ' ' + (p.tel ? esc(p.tel) : 'Sin teléfono') + '</a><a class="btn wa' + (esMovil(d) ? '' : ' desactivado') + '" href="' + esc(esMovil(d) ? 'https://wa.me/' + p.telDigitos : '#') + '" target="_blank" rel="noopener" data-registrar="whatsapp" data-id="' + esc(id) + '">' + ico('wa') + ' WhatsApp</a>' + (p.sitio && p.sitio !== '-' ? '<a class="btn" href="' + esc(/^https?:/.test(p.sitio) ? p.sitio : 'https://' + p.sitio) + '" target="_blank" rel="noopener">' + ico('abrir') + ' Sitio actual</a>' : '') + '</div>' +
       (p.prompt ? '<section class="ficha-seccion"><h3>Prompt para Opus <span class="der silencio">' + esc(p.prompt.split('/').pop()) + '</span></h3><div class="acciones-fila"><button class="btn btn-primario" data-prompt-copiar="' + esc(p.prompt) + '">' + ico('copiar') + ' Copiar prompt</button><button class="btn" data-prompt-ver="' + esc(p.prompt) + '" data-nombre="' + esc(p.negocio) + '">' + ico('ojo') + ' Ver prompt</button></div><p class="plantilla-ayuda" style="margin:8px 0 0">Se pega entero en una sesión nueva de Claude Code con directorio devs. Antes, leer demos\\' + esc(p.promptTanda) + '\\00-REGLAS-COMUNES.txt.</p></section>' : '') +
+      bloqueMensaje(id, d, it) +
       '<section class="ficha-seccion"><h3>Seguimiento' + (it.pendiente ? ' <span class="der" style="color:var(--aviso)">pendiente</span>' : '') + '</h3>' + bloqueSeguimiento(id, it, true) + '</section>' +
       bloqueNotas(id, it) +
       (p.gancho ? '<section class="ficha-seccion"><h3>Gancho de llamada</h3><blockquote class="gancho">' + esc(p.gancho) + '</blockquote></section>' : '') +
       '<section class="ficha-seccion"><h3>Datos</h3><div class="datos"><div class="dato"><span>Reseñas</span><b class="mono">' + fmt(p.resenas) + '</b></div><div class="dato"><span>Nota</span><b class="mono">' + (p.nota ? '★ ' + fmtNota(p.nota) : '–') + '</b></div><div class="dato"><span>Puntaje</span><b class="mono">' + (p.puntaje || '–') + '</b></div><div class="dato"><span>Presencia</span><b>' + esc(p.presencia || '–') + '</b></div><div class="dato"><span>Estado Excel</span><b>' + esc(p.estado || '–') + '</b></div><div class="dato"><span>Verificado</span><b class="mono">' + esc(p.verificado || '–') + '</b></div><div class="dato"><span>Origen</span><b>' + esc(p.origen || '–') + '</b></div></div></section>' +
       '</div>';
   }
-  function refrescarFicha() { if (estado.sel) { var f = $('#ficha'), y = f.scrollTop, d = buscarDemo(estado.sel), p = d ? null : buscarProspecto(estado.sel); if (!d && !p) return; var ta0 = f.querySelector('[data-nota-texto]'), borrador = ta0 ? ta0.value : ''; f.innerHTML = d ? fichaDemo(d) : fichaProspecto(p); f.scrollTop = y; var ta1 = f.querySelector('[data-nota-texto]'); if (ta1 && borrador) ta1.value = borrador; if (d && d.queFotos) { fetch((estado.servidor ? '/demos/' : '../../demos/') + d.queFotos.split('/').map(encodeURIComponent).join('/')).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var z = $('#que-fotos'); if (z && t) z.innerHTML = md(t); }).catch(function () { }); } } }
+  function refrescarFicha() { if (estado.sel) { var f = $('#ficha'), y = f.scrollTop, d = buscarDemo(estado.sel), p = d ? null : buscarProspecto(estado.sel); if (!d && !p) return; var ta0 = f.querySelector('[data-nota-texto]'), borrador = ta0 ? ta0.value : ''; var tm0 = f.querySelector('[data-mensaje]'), bm = tm0 ? tm0.value : null, fm = (tm0 && document.activeElement === tm0) ? [tm0.selectionStart, tm0.selectionEnd] : null; f.innerHTML = d ? fichaDemo(d) : fichaProspecto(p); f.scrollTop = y; var ta1 = f.querySelector('[data-nota-texto]'); if (ta1 && borrador) ta1.value = borrador; var tm1 = f.querySelector('[data-mensaje]'); if (tm1 && bm !== null) { tm1.value = bm; if (fm) { tm1.focus(); try { tm1.setSelectionRange(fm[0], fm[1]); } catch (e) { } } } if (d && d.queFotos) { fetch((estado.servidor ? '/demos/' : '../../demos/') + d.queFotos.split('/').map(encodeURIComponent).join('/')).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) { var z = $('#que-fotos'); if (z && t) z.innerHTML = md(t); }).catch(function () { }); } } }
 
   /* ---------- acciones sobre el seguimiento ---------- */
   function setOfrecida(id, val) {
@@ -819,9 +904,21 @@
       if (t.dataset.pedir) { var it = item(t.dataset.pedir); it.pedirDemo = t.checked; tocar(t.dataset.pedir); toast(t.checked ? 'Demo pedida: se construye en la próxima sesión' : 'Pedido quitado'); render(); refrescarFicha(); return; }
       if (t.dataset.pendiente) { var itp = item(t.dataset.pendiente); itp.pendiente = t.checked; if (!t.checked) itp.motivo = ''; else if (!itp.motivo) itp.motivo = MOTIVOS[0]; tocar(t.dataset.pendiente); toast(t.checked ? 'Marcado pendiente: ' + itp.motivo : 'Ya no está pendiente'); render(); refrescarFicha(); return; }
       if (t.dataset.filtro) { estado.filtros[t.dataset.filtro] = t.value; render(); return; }
+      if (t.dataset.mensaje !== undefined) { mensajePendiente = t.dataset.mensaje; sellarMensaje(); return; }
       if (t.dataset.campo) { var it2 = item(t.dataset.id); it2[t.dataset.campo] = t.value; tocar(t.dataset.id); render(); if (t.dataset.campo === 'motivo') refrescarFicha(); return; }
       if (t.dataset.config !== undefined) { estado.seg.config[t.dataset.config] = t.type === 'number' ? Number(t.value) : t.value; guardar(); toast('Ajuste guardado'); return; }
       if (t.id === 'importar-seg' && t.files[0]) { var r = new FileReader(); r.onload = function () { try { var n = juntarSeguimiento(normSeg(JSON.parse(r.result))); espejo = JSON.parse(JSON.stringify(estado.seg.items)); reconciliar(); guardarAhora(); render(); refrescarFicha(); toast('Seguimiento juntado: ' + n + ' fichas (gana lo más nuevo por campo; las notas se suman)' + (sincro.sesion ? ' · subiendo' : ''), 'ok'); } catch (err) { toast('Archivo inválido', 'error'); } }; r.readAsText(t.files[0]); t.value = ''; }
+    });
+    // El mensaje se escribe en el estado en CADA tecla, pero sin guardar: así un repintado
+    // (reloj de sincronización, Realtime, cambio de etapa) vuelve a pintar lo mismo y no se
+    // pierde nada. El sello y el guardado los pone sellarMensaje() al salir del campo.
+    document.addEventListener('input', function (e) {
+      var t = e.target; if (!t.dataset || t.dataset.mensaje === undefined) return;
+      var id = t.dataset.mensaje, d = objetoDe(id); if (!d) return;
+      var it = item(id), txt = t.value.slice(0, 2000);
+      it.mensaje = (txt.trim() === textoOferta(d).trim()) ? '' : txt;
+      var caja = t.closest('.mensaje'); if (caja) { caja.classList.toggle('editado', !!it.mensaje); var cont = caja.querySelector('.mensaje-pie .der'); if (cont) cont.textContent = txt.length + ' caracteres'; }
+      mensajePendiente = id; sellarMensajeLuego();
     });
     document.addEventListener('submit', function (e) {
       if (e.target && e.target.id === 'sync-form') { e.preventDefault(); var b = e.target.querySelector('button[type=submit]'); b.disabled = true; entrar($('#sync-correo').value.trim(), $('#sync-pass').value).then(function () { b.disabled = false; }); }
@@ -844,6 +941,8 @@
     document.addEventListener('dragleave', function (e) { var c = e.target.closest('.columna'); if (c && !c.contains(e.relatedTarget)) c.classList.remove('sobre'); });
     document.addEventListener('drop', function (e) { var c = e.target.closest('.columna'); if (!c) return; e.preventDefault(); var id = e.dataTransfer.getData('text/plain'); if (id) { setEtapa(id, c.dataset.etapa); toast(etapaInfo(c.dataset.etapa).nombre); } });
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); estado.instalar = e; $('#btn-instalar').hidden = false; });
+    // red de seguridad: si cierra la pestaña con el mensaje a medio sellar, se guarda igual
+    window.addEventListener('beforeunload', function () { if (mensajePendiente) { sellarMensaje(); guardarAhora(); } });
     $('#btn-instalar').addEventListener('click', function () { if (estado.instalar) { estado.instalar.prompt(); estado.instalar = null; $('#btn-instalar').hidden = true; } });
   }
   // Junta el seguimiento de otra persona con el propio: por negocio gana el que se tocó más tarde (campo m),
@@ -929,9 +1028,14 @@
       case 'actualizar': actualizarInventario(false); break;
       case 'actualizar-rapido': actualizarInventario(true); break;
       case 'plantilla-reset': estado.seg.config.plantillaWA = ''; guardar(); render(); toast('Plantilla original'); break;
+      case 'mensaje-copiar': copiar(valorMensaje(t.dataset.id), 'Mensaje copiado'); break;
+      case 'mensaje-wa': var dw = objetoDe(t.dataset.id); if (dw && dw.telDigitos) { var tw = valorMensaje(t.dataset.id); if (encodeURIComponent(tw).length > 1900) { toast('El mensaje es muy largo para el link de WhatsApp: acórtalo o cópialo', 'error'); return; } registrar(t.dataset.id, 'whatsapp'); window.open('https://wa.me/' + dw.telDigitos + '?text=' + encodeURIComponent(tw), '_blank', 'noopener'); } break;
+      case 'mensaje-auto': var da = objetoDe(t.dataset.id); item(t.dataset.id).mensaje = ''; var tta = $('[data-mensaje="' + CSS.escape(t.dataset.id) + '"]'); if (tta && da) tta.value = textoOferta(da); tocar(t.dataset.id); refrescarFicha(); toast('Mensaje automático'); break;
+      case 'mensaje-segundo': var ds = objetoDe(t.dataset.id); if (!ds) return; var txs = textoSegundo(ds); item(t.dataset.id).mensaje = txs; var tts = $('[data-mensaje="' + CSS.escape(t.dataset.id) + '"]'); if (tts) tts.value = txs; tocar(t.dataset.id); refrescarFicha(); toast('Segundo toque: revísalo antes de mandar'); break;
+      case 'mensaje-reset': estado.seg.config.plantillaOferta = ''; guardar(); render(); toast('Plantilla original'); break;
       case 'alerta-agregar': var fe = $('#alerta-fecha').value, tx = $('#alerta-texto').value.trim(); if (!fe || !tx) { toast('Falta la fecha o el texto', 'error'); return; } var al = (estado.seg.config.alertas || []).slice(); al.push({ fecha: fe, texto: tx, f: new Date().toISOString() }); estado.seg.config.alertas = sinRepetirAlertas(al); tocarConfig(); render(); toast('Alerta guardada', 'ok'); break;
       case 'exportar-seg': descargar('seguimiento-' + hoyISO() + '.json', JSON.stringify(estado.seg, null, 2), 'application/json'); break;
-      case 'borrar-seg': if (confirm('¿Borrar TODO el seguimiento (ofrecidas, notas, etapas)' + (sincro.sesion ? ', también en la nube y para el otro' : '') + '? El servidor guarda una copia por día en datos/respaldos/.')) { estado.seg = normSeg({ config: estado.seg.config }); espejo = {}; sincro.cola = {}; sincro.cursor = ''; guardarCola(); if (sincro.sesion) { sb().from('fichas').delete().neq('id', '').then(function (r) { if (r.error) toast('No se pudo borrar en la nube: ' + r.error.message, 'error'); }); } guardarAhora(); render(); toast('Seguimiento vaciado'); } break;
+      case 'borrar-seg': if (confirm('¿Borrar TODO el seguimiento (ofrecidas, notas, etapas, mensajes)' + (sincro.sesion ? ', también en la nube y para el otro' : '') + '? El servidor guarda una copia por día en datos/respaldos/.')) { estado.seg = normSeg({ config: estado.seg.config }); espejo = {}; sincro.cola = {}; sincro.cursor = ''; guardarCola(); if (sincro.sesion) { sb().from('fichas').delete().neq('id', '').then(function (r) { if (r.error) toast('No se pudo borrar en la nube: ' + r.error.message, 'error'); }); } guardarAhora(); render(); toast('Seguimiento vaciado'); } break;
       case 'sync-ahora': toast('Sincronizando…'); sincronizar('manual').then(function () { render(); }); break;
       case 'sync-resubir': reconciliar(); toast('Volviendo a subir ' + enCola() + ' fichas…'); sincronizar('manual').then(function () { render(); }); break;
       case 'sync-salir': salir(); break;

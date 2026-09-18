@@ -537,6 +537,14 @@ kbd { font: 600 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line
 .nota:hover .borrar { opacity: 1; }
 .nota-nueva { display: flex; gap: 8px; align-items: flex-end; }
 .nota-nueva textarea { flex: 1; min-height: 44px; }
+
+/* ---------- mensaje para ofrecer la página ---------- */
+.mensaje { background: var(--fondo-2); border: 1px solid var(--linea); border-radius: var(--radio-2); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.mensaje textarea { width: 100%; min-height: 260px; resize: vertical; line-height: 1.6; font-size: 13.5px; }
+.mensaje-pie { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mensaje-pie .der { margin-left: auto; font: 600 11px var(--mono); color: var(--texto-3); }
+.mensaje.editado { border-color: var(--acento-suave); }
+.mensaje.editado .mensaje-pie .der { color: var(--acento-2); }
 .historial { display: flex; flex-wrap: wrap; gap: 6px; }
 .historial span { font: 600 11px var(--mono); padding: 3px 8px; border-radius: 6px; background: var(--panel-3); color: var(--texto-2); }
 .chips-lista { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -608,6 +616,7 @@ kbd { font: 600 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line
   .cola-item { grid-template-columns: 1fr auto; }
   .cola-mini { display: none; }
   .ficha-acciones { grid-template-columns: 1fr 1fr; }
+  .mensaje textarea { min-height: 320px; }
   .modal { padding: 0; }
   .modal-caja { border-radius: 0; }
 }
