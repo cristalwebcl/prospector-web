@@ -545,6 +545,13 @@ kbd { font: 600 11px var(--mono); padding: 2px 6px; border: 1px solid var(--line
 .mensaje-pie .der { margin-left: auto; font: 600 11px var(--mono); color: var(--texto-3); }
 .mensaje.editado { border-color: var(--acento-suave); }
 .mensaje.editado .mensaje-pie .der { color: var(--acento-2); }
+/* propuesta por correo (28-09-2026): el campo del correo con su búsqueda al lado */
+.correo-fila { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.correo-fila .campo { flex: 1 1 260px; margin: 0; }
+.correo-previa { margin: 6px 0 10px; border: 1px solid var(--linea); border-radius: var(--radio-2); background: var(--fondo-2); }
+.correo-previa summary { cursor: pointer; padding: 10px 14px; font-weight: 600; color: var(--texto-2); }
+.correo-previa .md { padding: 0 14px 12px; max-height: 360px; overflow: auto; }
+.mensaje-pie .btn[disabled] { opacity: .45; cursor: not-allowed; }
 .historial { display: flex; flex-wrap: wrap; gap: 6px; }
 .historial span { font: 600 11px var(--mono); padding: 3px 8px; border-radius: 6px; background: var(--panel-3); color: var(--texto-2); }
 .chips-lista { display: flex; flex-wrap: wrap; gap: 6px; }

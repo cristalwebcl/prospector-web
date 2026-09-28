@@ -40,7 +40,9 @@
       mas: '<path d="M12 5v14M5 12h14"/>',
       github: '<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-1-2.6c3.1-.4 6.4-1.6 6.4-7A5.4 5.4 0 0 0 20 4.8 5 5 0 0 0 19.9 1s-1.2-.4-4 1.5a13.4 13.4 0 0 0-7 0C6.1.6 4.9 1 4.9 1A5 5 0 0 0 4.8 4.8 5.4 5.4 0 0 0 3.3 8.5c0 5.4 3.3 6.6 6.4 7a3.4 3.4 0 0 0-1 2.6V22"/>',
       pin: '<path d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
-      alerta: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'
+      alerta: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+      correo: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+      lupa: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'
     };
     return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (p[n] || '') + '</svg>';
   }
@@ -59,22 +61,50 @@
   var GUION = '1. Presentarse: nombre, de Loncoche, hago páginas para negocios de la zona.\n2. El gancho (lo que le pasa hoy a SU negocio en Google).\n3. «Le hice una muestra, ¿se la mando por WhatsApp?»\n4. Si dice que sí: mandar el link y agendar cuándo volver a llamar.\n5. Si dice que no: preguntar por qué, anotar, y no insistir.';
 
   /* ---- mensaje para ofrecer la página (CristalWeb) ----------------------
-     La plantilla editable lleva dos bloques que arma el código: {porque}
-     (con cifras si las hay) y {link} (publicada, sin subir, o sin demo).
+     Reescrito el 28-09-2026 con lo que repiten los que mejor venden en frío:
+       · de ellos primero: la frase que los nombra (reseñas, nota, comuna) va antes
+         que nuestro currículum, y nosotros nos presentamos en una línea;
+       · dar antes de pedir (reciprocidad, Cialdini): la muestra ya está hecha y es
+         sin costo;
+       · UNA pregunta fácil de contestar y «orientada al no» (Chris Voss): «¿Sería mala
+         idea…?» baja la guardia porque decir que no parece seguro;
+       · corto: fuera el relleno («no los compromete a nada», «gracias por el tiempo»);
+       · sin achicar al cliente: «negocios y emprendedores», no «negocios chicos».
+     La plantilla lleva tres bloques que arma el código: {porque} (con cifras si las
+     hay), {link} (publicada, sin subir, o sin demo) y {pregunta} (según haya muestra).
      Todo dato que falte se borra con su frase entera, nunca queda coja. */
-  var PLANTILLA_OFERTA = 'Hola, buenas. Soy {yo}, de CristalWeb: somos dos socios de Loncoche que hacemos páginas web para negocios chicos, simples, rápidas en el celular y que se pagan una sola vez.\n\n{porque}\n\n{link}\n\nTodo se cambia a su gusto: colores, fotos, textos, agregar servicios, precios, horarios, lo que falte; y lo que no les guste, se saca.\n\nConversarlo no cuesta nada y no los compromete a nada. Si les sirve seguimos, y si no, no hay ningún problema.\n\nGracias por el tiempo. Si prefiere que no le escribamos más, dígamelo y no lo molestamos de nuevo.';
+  var PLANTILLA_OFERTA = 'Hola, buenas. Soy {yo}, de CristalWeb: hacemos páginas web para negocios y emprendedores, rápidas en el celular y de pago único.\n\n{porque}\n\n{link}\n\nSi algo no les convence, se cambia: fotos, colores, textos, servicios u horarios.\n\n{pregunta}\n\nSi prefiere que no le escribamos más, me avisa y no lo molestamos de nuevo.';
   var PORQUE_NUMEROS = 'Nos fijamos en {nombre} porque su {rubro} en {ciudad} tiene {resenas} reseñas con {nota} de nota: la gente los recomienda, pero al buscarlos en Google no aparece nada propio de ustedes, sólo la ficha del mapa.';
   var PORQUE_SIMPLE = 'Nos fijamos en {nombre} porque se ve que les está yendo bien en {ciudad}, y al buscarlos en Google no aparece nada propio de ustedes: sólo la ficha del mapa.';
-  var LINK_PUBLICADA = 'Nos tomamos el atrevimiento de hacerles una página de muestra, para que no tengan que imaginársela:\n{url}\n{pieza}';
-  var LINK_SIN_SUBIR = 'Nos tomamos el atrevimiento de hacerles una página de muestra, para que no tengan que imaginársela. Todavía no la subimos a internet: le mando unas fotos de cómo quedó, o la publico hoy y le paso el link.\n{pieza}';
-  var LINK_OFRECER = 'Por eso queríamos proponerles hacerles una página: con sus fotos, sus servicios, los horarios y un botón de WhatsApp que llegue directo a este número. Si quiere le armamos una muestra primero, usted la ve y después decide.';
-  var PLANTILLA_SEGUNDO = 'Hola, buenas. Soy {yo}, de CristalWeb. Hace unos días les dejé una página de muestra de {nombre}.\n{link}\nNo es para apurarlos, era por si el mensaje se perdió. Cualquier cosa me escribe por acá.\n\nSi prefiere que no le escribamos más, dígamelo y listo.';
+  var LINK_PUBLICADA = 'Nos tomamos la libertad de hacerles una página de muestra, sin costo, para que no tengan que imaginársela:\n{url}\n{pieza}';
+  var LINK_SIN_SUBIR = 'Nos tomamos la libertad de hacerles una página de muestra, sin costo. Todavía no está en internet: si quiere le mando unas capturas, o la publico hoy y le paso el link.\n{pieza}';
+  var LINK_OFRECER = 'Queremos proponerles una página propia: con sus fotos, sus servicios, los horarios y un botón de WhatsApp que llegue directo a este número.';
+  var PREGUNTA_DEMO = '¿Sería mala idea que la miren con calma y me digan qué le cambiarían?';
+  var PREGUNTA_OFRECER = '¿Sería mala idea que les arme una muestra sin costo, para que la vean antes de decidir nada?';
+  var PLANTILLA_SEGUNDO = 'Hola, buenas. Soy {yo}, de CristalWeb. Hace unos días les dejé una página de muestra de {nombre}.\n{link}\nNo es para apurarlos, era por si el mensaje se perdió. ¿Sería mala idea que me digan si les sirve o no?\n\nSi prefiere que no le escribamos más, me avisa y listo.';
   var SEGUNDO_LINK = 'Acá va de nuevo por si se perdió: {url}\n';
+
+  /* ---- propuesta por correo (28-09-2026) --------------------------------
+     Más formal que el WhatsApp y sale de la cuenta de la SOCIEDAD: el botón abre
+     el redactor de Gmail ya como cristalwebcl@gmail.com, con destinatario, asunto
+     y cuerpo puestos. Nada se manda solo: la persona lo revisa y aprieta Enviar.
+     Mismos principios que el mensaje (de ellos primero, dar antes de pedir, una
+     pregunta orientada al no, corto). Ley 19.496 art. 28 B: el correo comercial
+     dice de qué trata (el asunto), quién lo manda y a qué dirección se pide no
+     recibir más (la firma y el pie). */
+  var CORREO_SOCIEDAD = 'cristalwebcl@gmail.com';
+  var ASUNTO_CORREO = 'Propuesta: una página web para {nombre}';
+  var PLANTILLA_CORREO = 'Estimados de {nombre}:\n\nLes escribe {yo}, de CristalWeb. Hacemos páginas web para negocios y emprendedores: rápidas en el celular, a nombre del negocio y de pago único, sin mensualidades.\n\n{porque}\n\n{link}\n\nTodo se ajusta a ustedes: fotos propias, colores, textos, servicios y horarios.\n\n{pregunta} Basta con responder este correo; si prefieren, los llamamos.\n\nAtentamente,\n{yo}\nCristalWeb · {correo}\n\n—\nLes escribimos porque su negocio aparece públicamente en Google Maps. Si prefieren no recibir más correos nuestros, respondan a {correo} con la palabra «NO» y no volveremos a escribirles.';
+  var LINK_PUBLICADA_CORREO = 'Nos tomamos la libertad de prepararles una página de muestra, sin costo, para que no tengan que imaginársela:\n{url}\n{pieza}';
+  var LINK_SIN_SUBIR_CORREO = 'Les preparamos una página de muestra, sin costo. Todavía no está publicada: si responden este correo, se la enviamos en el día.\n{pieza}';
+  var LINK_OFRECER_CORREO = 'Queremos proponerles una página propia: con sus fotos, sus servicios, los horarios y un botón para que los clientes los contacten directo.';
+  var PREGUNTA_DEMO_CORREO = '¿Sería mala idea que la revisen con calma y nos digan qué le cambiarían?';
+  var PREGUNTA_OFRECER_CORREO = '¿Sería mala idea que les preparemos una muestra sin costo, para que la vean antes de decidir nada?';
   var estado = {
     datos: null, seg: { version: 1, items: {}, config: {} }, servidor: false,
     usuario: localStorage.getItem('prospector.usuario') || 'Yordy',
     vista: 'hoy', modo: localStorage.getItem('prospector.modo') || 'grilla',
-    filtros: { q: '', lote: '', ciudad: '', rubro: '', pub: '', etapa: '', orden: 'puntaje', hoja: 'sur', prioridad: false, conPrompt: false, pendiente: false, quien: '' },
+    filtros: { q: '', lote: '', ciudad: '', rubro: '', pub: '', etapa: '', orden: 'puntaje', hoja: 'sur', prioridad: false, conPrompt: false, pendiente: false, conCorreo: false, quien: '' },
     sel: null, visibles: [], idx: -1, ordenTabla: { campo: 'puntaje', dir: -1 }, prospectoOrden: { campo: 'puntaje', dir: -1 },
     instalar: null, alertas: []
   };
@@ -149,11 +179,11 @@
   // Desde el 07-09-2026 además sella POR CAMPO (it.mc[campo] = hora) comparando contra el espejo,
   // la copia de cómo estaba la ficha la última vez que se tocó o se recibió de la nube: así dos
   // personas que cambian campos distintos de la misma ficha no se pisan al fundir.
-  var CAMPOS_FICHA = ['ofrecida', 'fechaOfrecida', 'canal', 'resultado', 'proximo', 'prioridad', 'pedirDemo', 'quien', 'pendiente', 'motivo', 'mensaje'];
+  var CAMPOS_FICHA = ['ofrecida', 'fechaOfrecida', 'canal', 'resultado', 'proximo', 'prioridad', 'pedirDemo', 'quien', 'pendiente', 'motivo', 'mensaje', 'correo'];
   // campos que la app cambia en bloque y que sólo tienen sentido juntos: se funden como uno
   var GRUPOS_FICHA = [['ofrecida', 'fechaOfrecida', 'resultado'], ['pendiente', 'motivo']];
   var espejo = {};
-  function fichaVacia() { return { ofrecida: false, fechaOfrecida: '', canal: '', resultado: '', proximo: '', prioridad: 0, pedirDemo: false, quien: '', pendiente: false, motivo: '' }; }
+  function fichaVacia() { return { ofrecida: false, fechaOfrecida: '', canal: '', resultado: '', proximo: '', prioridad: 0, pedirDemo: false, quien: '', pendiente: false, motivo: '', correo: '' }; }
   // el sello nunca retrocede: si la ficha ya traía una hora más nueva (reloj del otro
   // adelantado), se sella un milisegundo después, o el trigger de la nube la rechazaría
   function selloDespuesDe(m) { var ahora = new Date().toISOString(); return (m && m >= ahora) ? new Date(Date.parse(m) + 1).toISOString() : ahora; }
@@ -179,7 +209,7 @@
     var it = item(id);
     it.historial.push({ f: new Date().toISOString(), t: tipo, q: estado.usuario });
     if (it.historial.length > 200) it.historial.shift();
-    if (/^(llamada|whatsapp|ofrecida)$/.test(tipo)) it.quien = estado.usuario;   // el último que lo contactó
+    if (/^(llamada|whatsapp|correo|ofrecida)$/.test(tipo)) it.quien = estado.usuario;   // el último que lo contactó
     tocar(id);
   }
   function setUsuario(q) { estado.usuario = q; localStorage.setItem('prospector.usuario', q); pintarUsuario(); toast('Ahora las llamadas se anotan como ' + q); }
@@ -226,7 +256,7 @@
   function objetoDe(id) { var d = buscarDemo(id); if (d) return d; var p = buscarProspecto(id); return p ? adaptarProspecto(p) : null; }
   function frasePieza(p) {
     var s = String(p || '').trim(); if (!s) return '';
-    return 'Adentro le pusimos algo que no muestra nadie más: ' + s.charAt(0).toLowerCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.');
+    return 'Adentro va algo que no muestra nadie más: ' + s.charAt(0).toLowerCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.');
   }
   // cada dato vive en una frase o en un segmento propio: si falta, se borra entero
   function rellenar(pl, d) {
@@ -241,6 +271,7 @@
       .replace(/\{url\}/g, d.url || '')
       .replace(/\{gancho\}/g, d.gancho || '')
       .replace(/\{yo\}/g, config('nombre', 'Yordy Serna'))
+      .replace(/\{correo\}/g, CORREO_SOCIEDAD)
       .replace(/[ \t]{2,}/g, ' ').replace(/ +([,.:;])/g, '$1')
       .replace(/^[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
   }
@@ -251,10 +282,47 @@
   }
   function textoOferta(d) {
     var bl = d.esProspecto ? LINK_OFRECER : (d.url ? LINK_PUBLICADA : LINK_SIN_SUBIR);
-    return rellenar(config('plantillaOferta', PLANTILLA_OFERTA).replace(/\{porque\}/g, porqueDe(d)).replace(/\{link\}/g, bl), d);
+    var pq = d.esProspecto ? PREGUNTA_OFRECER : PREGUNTA_DEMO;
+    return rellenar(config('plantillaOferta', PLANTILLA_OFERTA).replace(/\{porque\}/g, porqueDe(d)).replace(/\{link\}/g, bl).replace(/\{pregunta\}/g, pq), d);
   }
   function textoSegundo(d) {
     return rellenar(config('plantillaSegundo', PLANTILLA_SEGUNDO).replace(/\{link\}/g, d.url ? SEGUNDO_LINK : ''), d);
+  }
+  function textoCorreo(d) {
+    var bl = d.esProspecto ? LINK_OFRECER_CORREO : (d.url ? LINK_PUBLICADA_CORREO : LINK_SIN_SUBIR_CORREO);
+    var pq = d.esProspecto ? PREGUNTA_OFRECER_CORREO : PREGUNTA_DEMO_CORREO;
+    return rellenar(config('plantillaCorreo', PLANTILLA_CORREO).replace(/\{porque\}/g, porqueDe(d)).replace(/\{link\}/g, bl).replace(/\{pregunta\}/g, pq), d);
+  }
+  function asuntoCorreo(d) { return rellenar(config('asuntoCorreo', ASUNTO_CORREO), d); }
+  function correoValido(s) { return /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i.test(String(s || '').trim()); }
+  // el redactor de Gmail en la cuenta de la sociedad (si no hay sesión, Gmail pide entrar)
+  function linkGmail(para, asunto, cuerpo) {
+    return 'https://mail.google.com/mail/u/' + CORREO_SOCIEDAD + '/?view=cm&fs=1&tf=1&to=' + encodeURIComponent(para) +
+      '&su=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(cuerpo);
+  }
+  function linkMailto(para, asunto, cuerpo) {
+    return 'mailto:' + encodeURIComponent(para).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(cuerpo);
+  }
+  // búsqueda para encontrar el correo a mano (Instagram, Facebook, directorios): nadie lo raspa solo
+  function linkBuscarCorreo(d) {
+    return 'https://www.google.com/search?q=' + encodeURIComponent('"' + (d.nombre || '') + '" ' + (d.ciudad || '') + ' correo OR email OR "@gmail.com"');
+  }
+  function bloqueCorreo(id, d, it) {
+    var para = it.correo || '', ok = correoValido(para), cuerpo = textoCorreo(d);
+    return '<section class="ficha-seccion"><h3>Propuesta por correo <span class="der silencio">sale de ' + esc(CORREO_SOCIEDAD) + '</span></h3>' +
+      '<div class="correo-fila">' +
+        '<label class="campo">Correo del negocio<input class="entrada" type="email" data-correo="' + esc(id) + '" value="' + esc(para) + '" placeholder="contacto@negocio.cl" autocomplete="off" spellcheck="false"></label>' +
+        '<a class="btn btn-chico btn-fantasma" href="' + esc(linkBuscarCorreo(d)) + '" target="_blank" rel="noopener">' + ico('lupa') + ' Buscar su correo</a>' +
+      '</div>' +
+      (para && !ok ? '<p class="plantilla-ayuda" style="color:var(--aviso)">Ese correo no parece válido: revísalo.</p>' : '') +
+      '<p class="plantilla-ayuda">Asunto: <b>' + esc(asuntoCorreo(d)) + '</b>' + (!d.esProspecto && !d.url ? ' · la demo no está publicada: el correo ofrece mandarla después' : '') + '</p>' +
+      '<details class="correo-previa"><summary>Ver el correo</summary><div class="md"><p style="white-space:pre-line">' + esc(cuerpo) + '</p></div></details>' +
+      '<div class="mensaje-pie">' +
+        '<button class="btn btn-chico btn-primario" data-accion="correo-gmail" data-id="' + esc(id) + '"' + (ok ? '' : ' disabled') + '>' + ico('correo') + ' Abrir en Gmail</button>' +
+        '<button class="btn btn-chico" data-accion="correo-otro" data-id="' + esc(id) + '"' + (ok ? '' : ' disabled') + '>Otro programa</button>' +
+        '<button class="btn btn-chico btn-fantasma" data-accion="correo-copiar" data-id="' + esc(id) + '">' + ico('copiar') + ' Copiar</button>' +
+        '<span class="der">se envía a mano</span>' +
+      '</div></section>';
   }
   // lo que se ve AHORA en el recuadro: el textarea vivo manda sobre lo guardado
   function valorMensaje(id) {
@@ -341,6 +409,7 @@
       if (f.etapa && etapaDe(it) !== f.etapa) return false;
       if (f.prioridad && !(it.prioridad > 0)) return false;
       if (f.pendiente && !it.pendiente) return false;
+      if (f.conCorreo && !correoValido(it.correo)) return false;
       if (f.quien === 'nadie' && it.quien) return false;
       if (f.quien && f.quien !== 'nadie' && it.quien !== f.quien) return false;
       return coincide(d, q);
@@ -493,6 +562,7 @@
       '<select class="selector" data-filtro="orden"><option value="puntaje">Por puntaje</option><option value="resenas"' + (f.orden === 'resenas' ? ' selected' : '') + '>Por reseñas</option><option value="nota"' + (f.orden === 'nota' ? ' selected' : '') + '>Por nota</option><option value="prioridad"' + (f.orden === 'prioridad' ? ' selected' : '') + '>Por prioridad</option><option value="proximo"' + (f.orden === 'proximo' ? ' selected' : '') + '>Por próximo contacto</option><option value="numdesc"' + (f.orden === 'numdesc' ? ' selected' : '') + '>Más nuevas primero</option><option value="num"' + (f.orden === 'num' ? ' selected' : '') + '>Por número</option><option value="nombre"' + (f.orden === 'nombre' ? ' selected' : '') + '>Por nombre</option><option value="modificado"' + (f.orden === 'modificado' ? ' selected' : '') + '>Última modificación</option></select>' +
       '<button class="chip' + (f.prioridad ? ' activo' : '') + '" data-filtro="prioridad">★ Con prioridad</button>' +
       '<button class="chip' + (f.pendiente ? ' activo' : '') + '" data-filtro="pendiente">Pendientes' + (nPend ? ' · ' + nPend : '') + '</button>' +
+      '<button class="chip' + (f.conCorreo ? ' activo' : '') + '" data-filtro="conCorreo">' + ico('correo') + ' Con correo</button>' +
       '<select class="selector" data-filtro="quien"><option value="">Quién llamó: todos</option>' + PERSONAS.map(function (q) { return '<option value="' + q + '"' + (f.quien === q ? ' selected' : '') + '>Llamó ' + q + '</option>'; }).join('') + '<option value="nadie"' + (f.quien === 'nadie' ? ' selected' : '') + '>Nadie todavía</option></select>' +
       '<span class="resumen-filtro"><b>' + lista.length + '</b> de ' + demos().length + '</span>' +
       '</div>';
@@ -626,9 +696,14 @@
         '<p class="plantilla-ayuda">Se reemplazan <code>{nombre}</code>, <code>{url}</code>, <code>{gancho}</code>, <code>{ciudad}</code> y <code>{yo}</code>. Si la demo no está publicada, <code>{url}</code> avisa en vez de mandar un link roto.</p>' +
         '<label class="campo">Guión de llamada (se muestra en la ficha)<textarea data-config="guion" rows="6">' + esc(config('guion', GUION)) + '</textarea></label>' +
       '</div></section>' +
+      '<section class="panel"><div class="panel-cab"><h2>Propuesta por correo</h2><div class="der"><button class="btn btn-chico btn-fantasma" data-accion="correo-reset">Volver al original</button></div></div><div class="campos">' +
+        '<label class="campo">Asunto<input class="entrada" data-config="asuntoCorreo" value="' + esc(config('asuntoCorreo', ASUNTO_CORREO)) + '"></label>' +
+        '<label class="campo">Plantilla<textarea data-config="plantillaCorreo" rows="16">' + esc(config('plantillaCorreo', PLANTILLA_CORREO)) + '</textarea></label>' +
+        '<p class="plantilla-ayuda">Sale de <b>' + esc(CORREO_SOCIEDAD) + '</b>: «Abrir en Gmail» abre el redactor en esa cuenta con todo puesto, y el envío lo hace uno. Mismos bloques que el mensaje (<code>{porque}</code>, <code>{link}</code>, <code>{pregunta}</code>, <code>{nombre}</code>, <code>{rubro}</code>, <code>{ciudad}</code>, <code>{pieza}</code>, <code>{yo}</code>) más <code>{correo}</code>. No borres el pie: la ley 19.496 (art. 28 B) exige que el correo comercial diga quién lo manda y cómo pedir no recibir más.</p>' +
+      '</div></section>' +
       '<section class="panel"><div class="panel-cab"><h2>Mensaje para ofrecerla</h2><div class="der"><button class="btn btn-chico btn-fantasma" data-accion="mensaje-reset">Volver al original</button></div></div><div class="campos">' +
         '<label class="campo">Plantilla<textarea data-config="plantillaOferta" rows="14">' + esc(config('plantillaOferta', PLANTILLA_OFERTA)) + '</textarea></label>' +
-        '<p class="plantilla-ayuda">La app arma sola dos bloques: <code>{porque}</code> (con reseñas y nota si las hay, sin cifras si no) y <code>{link}</code> (demo publicada, demo sin subir, o prospecto sin demo). Además se reemplazan <code>{nombre}</code>, <code>{rubro}</code>, <code>{ciudad}</code>, <code>{pieza}</code>, <code>{gancho}</code> y <code>{yo}</code>; el que no tenga dato se borra con su frase entera. Es de este navegador, igual que la de WhatsApp.</p>' +
+        '<p class="plantilla-ayuda">La app arma sola tres bloques: <code>{porque}</code> (con reseñas y nota si las hay, sin cifras si no), <code>{link}</code> (demo publicada, demo sin subir, o prospecto sin demo) y <code>{pregunta}</code> (la pregunta del final, según haya muestra o no). Además se reemplazan <code>{nombre}</code>, <code>{rubro}</code>, <code>{ciudad}</code>, <code>{pieza}</code>, <code>{gancho}</code> y <code>{yo}</code>; el que no tenga dato se borra con su frase entera. Es de este navegador, igual que la de WhatsApp.</p>' +
       '</div></section>' +
       '<section class="panel"><div class="panel-cab"><h2>Alertas con fecha</h2></div><div class="lista-alertas">' + (al.length ? al.map(function (a, i) { return '<div class="fila-alerta"><time>' + esc(fechaCorta(a.fecha)) + '</time><span>' + esc(a.texto) + '</span><button class="btn-icono" data-alerta-borrar="' + i + '" title="Quitar">' + ico('x') + '</button></div>'; }).join('') : '<p class="silencio" style="margin:0;font-size:13px">Las de datos/alertas.json las mantiene Claude; acá van las tuyas.</p>') + '</div>' +
         '<div class="campos" style="grid-template-columns:140px 1fr auto;align-items:end"><label class="campo">Fecha<input type="date" id="alerta-fecha" value="' + hoyISO() + '"></label><label class="campo">Texto<input id="alerta-texto" placeholder="Ej.: vence el dominio de …"></label><button class="btn btn-primario" data-accion="alerta-agregar">' + ico('mas') + ' Agregar</button></div></section>' +
@@ -750,6 +825,7 @@
       '</div>' +
       (!d.url && esMovil(d) ? '<div class="aviso" style="margin:0">' + ico('alerta') + ' La demo no está publicada: el mensaje de WhatsApp no lleva link. Publícala primero o mándale una captura.</div>' : '') +
       bloqueMensaje(d.id, d, it) +
+      bloqueCorreo(d.id, d, it) +
       '<section class="ficha-seccion"><h3>Seguimiento <span class="der" style="color:' + e.color + '">' + esc(e.nombre) + (it.pendiente ? ' · pendiente' : '') + '</span></h3>' + bloqueSeguimiento(d.id, it, false) + '</section>' +
       bloqueNotas(d.id, it) +
       (d.gancho ? '<section class="ficha-seccion"><h3>Gancho de llamada</h3><blockquote class="gancho">' + esc(d.gancho) + '</blockquote></section>' : '') +
@@ -773,6 +849,7 @@
       '<div class="ficha-acciones"><a class="btn llamar' + (p.telDigitos ? '' : ' desactivado') + '" href="tel:+' + esc(p.telDigitos) + '" data-registrar="llamada" data-id="' + esc(id) + '">' + ico('tel') + ' ' + (p.tel ? esc(p.tel) : 'Sin teléfono') + '</a><a class="btn wa' + (esMovil(d) ? '' : ' desactivado') + '" href="' + esc(esMovil(d) ? 'https://wa.me/' + p.telDigitos : '#') + '" target="_blank" rel="noopener" data-registrar="whatsapp" data-id="' + esc(id) + '">' + ico('wa') + ' WhatsApp</a>' + (p.sitio && p.sitio !== '-' ? '<a class="btn" href="' + esc(/^https?:/.test(p.sitio) ? p.sitio : 'https://' + p.sitio) + '" target="_blank" rel="noopener">' + ico('abrir') + ' Sitio actual</a>' : '') + '</div>' +
       (p.prompt ? '<section class="ficha-seccion"><h3>Prompt para Opus <span class="der silencio">' + esc(p.prompt.split('/').pop()) + '</span></h3><div class="acciones-fila"><button class="btn btn-primario" data-prompt-copiar="' + esc(p.prompt) + '">' + ico('copiar') + ' Copiar prompt</button><button class="btn" data-prompt-ver="' + esc(p.prompt) + '" data-nombre="' + esc(p.negocio) + '">' + ico('ojo') + ' Ver prompt</button></div><p class="plantilla-ayuda" style="margin:8px 0 0">Se pega entero en una sesión nueva de Claude Code con directorio devs. Antes, leer demos\\' + esc(p.promptTanda) + '\\00-REGLAS-COMUNES.txt.</p></section>' : '') +
       bloqueMensaje(id, d, it) +
+      bloqueCorreo(id, d, it) +
       '<section class="ficha-seccion"><h3>Seguimiento' + (it.pendiente ? ' <span class="der" style="color:var(--aviso)">pendiente</span>' : '') + '</h3>' + bloqueSeguimiento(id, it, true) + '</section>' +
       bloqueNotas(id, it) +
       (p.gancho ? '<section class="ficha-seccion"><h3>Gancho de llamada</h3><blockquote class="gancho">' + esc(p.gancho) + '</blockquote></section>' : '') +
@@ -905,6 +982,7 @@
       if (t.dataset.pendiente) { var itp = item(t.dataset.pendiente); itp.pendiente = t.checked; if (!t.checked) itp.motivo = ''; else if (!itp.motivo) itp.motivo = MOTIVOS[0]; tocar(t.dataset.pendiente); toast(t.checked ? 'Marcado pendiente: ' + itp.motivo : 'Ya no está pendiente'); render(); refrescarFicha(); return; }
       if (t.dataset.filtro) { estado.filtros[t.dataset.filtro] = t.value; render(); return; }
       if (t.dataset.mensaje !== undefined) { mensajePendiente = t.dataset.mensaje; sellarMensaje(); return; }
+      if (t.dataset.correo !== undefined) { var itc = item(t.dataset.correo), vc = t.value.trim(); if (vc === (itc.correo || '')) return; itc.correo = vc; tocar(t.dataset.correo); refrescarFicha(); toast(vc ? (correoValido(vc) ? 'Correo guardado' : 'Guardado, pero no parece un correo válido') : 'Correo borrado'); return; }
       if (t.dataset.campo) { var it2 = item(t.dataset.id); it2[t.dataset.campo] = t.value; tocar(t.dataset.id); render(); if (t.dataset.campo === 'motivo') refrescarFicha(); return; }
       if (t.dataset.config !== undefined) { estado.seg.config[t.dataset.config] = t.type === 'number' ? Number(t.value) : t.value; guardar(); toast('Ajuste guardado'); return; }
       if (t.id === 'importar-seg' && t.files[0]) { var r = new FileReader(); r.onload = function () { try { var n = juntarSeguimiento(normSeg(JSON.parse(r.result))); espejo = JSON.parse(JSON.stringify(estado.seg.items)); reconciliar(); guardarAhora(); render(); refrescarFicha(); toast('Seguimiento juntado: ' + n + ' fichas (gana lo más nuevo por campo; las notas se suman)' + (sincro.sesion ? ' · subiendo' : ''), 'ok'); } catch (err) { toast('Archivo inválido', 'error'); } }; r.readAsText(t.files[0]); t.value = ''; }
@@ -1029,6 +1107,16 @@
       case 'actualizar-rapido': actualizarInventario(true); break;
       case 'plantilla-reset': estado.seg.config.plantillaWA = ''; guardar(); render(); toast('Plantilla original'); break;
       case 'mensaje-copiar': copiar(valorMensaje(t.dataset.id), 'Mensaje copiado'); break;
+      case 'correo-gmail': case 'correo-otro': case 'correo-copiar':
+        var dc = objetoDe(t.dataset.id); if (!dc) return;
+        var parac = (itemLectura(t.dataset.id).correo || '').trim(), asc = asuntoCorreo(dc), cuc = textoCorreo(dc);
+        if (t.dataset.accion === 'correo-copiar') { copiar((parac ? 'Para: ' + parac + '\n' : '') + 'Asunto: ' + asc + '\n\n' + cuc, 'Correo copiado'); break; }
+        if (!correoValido(parac)) { toast('Falta el correo del negocio (o no es válido)', 'error'); return; }
+        registrar(t.dataset.id, 'correo');
+        if (t.dataset.accion === 'correo-gmail') { window.open(linkGmail(parac, asc, cuc), '_blank', 'noopener'); toast('Gmail abierto como ' + CORREO_SOCIEDAD + ': revísalo y envíalo tú'); }
+        else { location.href = linkMailto(parac, asc, cuc); toast('Correo abierto en tu programa: revísalo y envíalo desde ' + CORREO_SOCIEDAD); }
+        break;
+      case 'correo-reset': estado.seg.config.plantillaCorreo = ''; estado.seg.config.asuntoCorreo = ''; guardar(); render(); toast('Correo original'); break;
       case 'mensaje-wa': var dw = objetoDe(t.dataset.id); if (dw && dw.telDigitos) { var tw = valorMensaje(t.dataset.id); if (encodeURIComponent(tw).length > 1900) { toast('El mensaje es muy largo para el link de WhatsApp: acórtalo o cópialo', 'error'); return; } registrar(t.dataset.id, 'whatsapp'); window.open('https://wa.me/' + dw.telDigitos + '?text=' + encodeURIComponent(tw), '_blank', 'noopener'); } break;
       case 'mensaje-auto': var da = objetoDe(t.dataset.id); item(t.dataset.id).mensaje = ''; var tta = $('[data-mensaje="' + CSS.escape(t.dataset.id) + '"]'); if (tta && da) tta.value = textoOferta(da); tocar(t.dataset.id); refrescarFicha(); toast('Mensaje automático'); break;
       case 'mensaje-segundo': var ds = objetoDe(t.dataset.id); if (!ds) return; var txs = textoSegundo(ds); item(t.dataset.id).mensaje = txs; var tts = $('[data-mensaje="' + CSS.escape(t.dataset.id) + '"]'); if (tts) tts.value = txs; tocar(t.dataset.id); refrescarFicha(); toast('Segundo toque: revísalo antes de mandar'); break;
