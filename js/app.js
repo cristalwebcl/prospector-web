@@ -308,13 +308,15 @@
     return 'https://www.google.com/search?q=' + encodeURIComponent('"' + (d.nombre || '') + '" ' + (d.ciudad || '') + ' correo OR email OR "@gmail.com"');
   }
   function bloqueCorreo(id, d, it) {
-    var para = it.correo || '', ok = correoValido(para), cuerpo = textoCorreo(d);
+    // el escrito a mano manda; si no hay, el que se encontró publicado (datos/correos/correos.json)
+    var propio = !!it.correo, para = it.correo || d.correoPublico || '', ok = correoValido(para), cuerpo = textoCorreo(d);
     return '<section class="ficha-seccion"><h3>Propuesta por correo <span class="der silencio">sale de ' + esc(CORREO_SOCIEDAD) + '</span></h3>' +
       '<div class="correo-fila">' +
         '<label class="campo">Correo del negocio<input class="entrada" type="email" data-correo="' + esc(id) + '" value="' + esc(para) + '" placeholder="contacto@negocio.cl" autocomplete="off" spellcheck="false"></label>' +
         '<a class="btn btn-chico btn-fantasma" href="' + esc(linkBuscarCorreo(d)) + '" target="_blank" rel="noopener">' + ico('lupa') + ' Buscar su correo</a>' +
       '</div>' +
       (para && !ok ? '<p class="plantilla-ayuda" style="color:var(--aviso)">Ese correo no parece válido: revísalo.</p>' : '') +
+      (!propio && d.correoPublico ? '<p class="plantilla-ayuda">Encontrado publicado en: ' + (/^https?:/.test(d.correoFuente || '') ? '<a href="' + esc(d.correoFuente.replace(/ \(.*\)$/, '')) + '" target="_blank" rel="noopener">' + esc(d.correoFuente) + '</a>' : esc(d.correoFuente || '')) + '. Si no es el correcto, escribe otro encima.</p>' : '') +
       '<p class="plantilla-ayuda">Asunto: <b>' + esc(asuntoCorreo(d)) + '</b>' + (!d.esProspecto && !d.url ? ' · la demo no está publicada: el correo ofrece mandarla después' : '') + '</p>' +
       '<details class="correo-previa"><summary>Ver el correo</summary><div class="md"><p style="white-space:pre-line">' + esc(cuerpo) + '</p></div></details>' +
       '<div class="mensaje-pie">' +
@@ -409,7 +411,7 @@
       if (f.etapa && etapaDe(it) !== f.etapa) return false;
       if (f.prioridad && !(it.prioridad > 0)) return false;
       if (f.pendiente && !it.pendiente) return false;
-      if (f.conCorreo && !correoValido(it.correo)) return false;
+      if (f.conCorreo && !correoValido(it.correo || d.correoPublico)) return false;
       if (f.quien === 'nadie' && it.quien) return false;
       if (f.quien && f.quien !== 'nadie' && it.quien !== f.quien) return false;
       return coincide(d, q);
@@ -1109,7 +1111,7 @@
       case 'mensaje-copiar': copiar(valorMensaje(t.dataset.id), 'Mensaje copiado'); break;
       case 'correo-gmail': case 'correo-otro': case 'correo-copiar':
         var dc = objetoDe(t.dataset.id); if (!dc) return;
-        var parac = (itemLectura(t.dataset.id).correo || '').trim(), asc = asuntoCorreo(dc), cuc = textoCorreo(dc);
+        var parac = (itemLectura(t.dataset.id).correo || dc.correoPublico || '').trim(), asc = asuntoCorreo(dc), cuc = textoCorreo(dc);
         if (t.dataset.accion === 'correo-copiar') { copiar((parac ? 'Para: ' + parac + '\n' : '') + 'Asunto: ' + asc + '\n\n' + cuc, 'Correo copiado'); break; }
         if (!correoValido(parac)) { toast('Falta el correo del negocio (o no es válido)', 'error'); return; }
         registrar(t.dataset.id, 'correo');
