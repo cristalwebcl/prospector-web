@@ -288,12 +288,18 @@
   function textoSegundo(d) {
     return rellenar(config('plantillaSegundo', PLANTILLA_SEGUNDO).replace(/\{link\}/g, d.url ? SEGUNDO_LINK : ''), d);
   }
+  // correos.json puede traer el nombre limpio («Cabañas El Arrayán», no «… (Villarrica)») y una
+  // frase de por qué propia cuando la estándar no sería cierta (web caída, AgendaPro, Google Sites)
+  function paraCorreo(d) {
+    if (!d.correoNombre) return d;
+    var c = {}; for (var k in d) c[k] = d[k]; c.nombre = d.correoNombre; return c;
+  }
   function textoCorreo(d) {
     var bl = d.esProspecto ? LINK_OFRECER_CORREO : (d.url ? LINK_PUBLICADA_CORREO : LINK_SIN_SUBIR_CORREO);
     var pq = d.esProspecto ? PREGUNTA_OFRECER_CORREO : PREGUNTA_DEMO_CORREO;
-    return rellenar(config('plantillaCorreo', PLANTILLA_CORREO).replace(/\{porque\}/g, porqueDe(d)).replace(/\{link\}/g, bl).replace(/\{pregunta\}/g, pq), d);
+    return rellenar(config('plantillaCorreo', PLANTILLA_CORREO).replace(/\{porque\}/g, d.correoPorque || porqueDe(d)).replace(/\{link\}/g, bl).replace(/\{pregunta\}/g, pq), paraCorreo(d));
   }
-  function asuntoCorreo(d) { return rellenar(config('asuntoCorreo', ASUNTO_CORREO), d); }
+  function asuntoCorreo(d) { return rellenar(config('asuntoCorreo', ASUNTO_CORREO), paraCorreo(d)); }
   function correoValido(s) { return /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i.test(String(s || '').trim()); }
   // el redactor de Gmail en la cuenta de la sociedad (si no hay sesión, Gmail pide entrar)
   function linkGmail(para, asunto, cuerpo) {
